@@ -8,33 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Build a thin vertical slice first
-
-**Priority:** P0
-
-### Gap
-
-The repository currently contains a product idea but no executable, implementation language, or build and release path. Designing every package before any repository status is visible would delay feedback on the parts most likely to shape the program: Git parsing, refresh behavior, and terminal rendering.
-
-### Approach
-
-Use Go for the initial implementation and build the smallest end-to-end path first:
-
-```text
-directory -> repository discovery -> local Git status -> sorted snapshot -> terminal output
-```
-
-Add continuous redraw and background fetches only after this path works against real repositories. Keep the internal seams named in `IDEA.md`, but create packages only where they isolate a real boundary, such as Git subprocesses or scheduler state.
-
-### Implementation considerations
-
-- Go supports a single portable binary and has adequate standard-library support for traversal, subprocesses, cancellation, and concurrency.
-- Limit the terminal layer to one focused dependency, or a very small ANSI/raw-terminal adapter; do not adopt a broad application framework solely for future flexibility.
-- Make `go build ./...` and `go test ./...` the initial quality gates.
-- Establish macOS and Linux release builds early enough to expose terminal portability issues.
-- Avoid configuration, plugin, and persistence abstractions until a concrete requirement needs them.
-
-## 2. Specify repository discovery as a testable contract
+## 1. Specify repository discovery as a testable contract
 
 **Priority:** P0
 
@@ -55,7 +29,7 @@ Implement discovery as a pure, independently testable operation that returns rep
 - Cancel an obsolete scan when `r` starts a newer one; tag results with a scan generation so late results cannot reintroduce removed repositories.
 - Cover `.git` files, symlink loops, unreadable directories, and repository removal with filesystem tests.
 
-## 3. Define exact status-count semantics around porcelain v2
+## 2. Define exact status-count semantics around porcelain v2
 
 **Priority:** P0
 
@@ -76,7 +50,7 @@ Use `git status --porcelain=v2 --branch -z` as the single local-status query and
 - Surface conflicts distinctly because they require more attention than an ordinary dirty worktree.
 - Keep parser fixtures for every supported record form, including filenames that are hostile to line-oriented parsing.
 
-## 4. Put every Git invocation behind one bounded runner
+## 3. Put every Git invocation behind one bounded runner
 
 **Priority:** P0
 
@@ -97,7 +71,7 @@ Create one small Git command runner used by both local inspection and fetch work
 - Distinguish timeout, missing executable, permission, non-repository, and ordinary Git exit failures.
 - Truncate secrets and excessively long diagnostics before they reach the UI; never log the complete inherited environment or remote URLs containing credentials.
 
-## 5. Give one coordinator ownership of dashboard state
+## 4. Give one coordinator ownership of dashboard state
 
 **Priority:** P0
 
@@ -118,7 +92,7 @@ Use a single coordinator to own the repository map. Workers produce typed result
 - Prefer channels and single ownership over locks spread across the model.
 - Run tests with Go's race detector once concurrency exists.
 
-## 6. Make remote refresh bounded, deduplicated, and noninteractive
+## 5. Make remote refresh bounded, deduplicated, and noninteractive
 
 **Priority:** P0
 
@@ -139,7 +113,7 @@ Use a small fixed fetch worker pool and at most one queued or active fetch per r
 - Respect `--no-fetch` completely, including startup and the periodic timer; define whether pressing `f` remains disabled or explicitly overrides it.
 - Track last attempt, last success, duration, and concise failure independently for each repository.
 
-## 7. Render progressive results deterministically
+## 6. Render progressive results deterministically
 
 **Priority:** P0
 
@@ -160,7 +134,7 @@ Make rendering a pure transformation from a snapshot plus terminal dimensions to
 - Make color a presentation layer over authoritative text.
 - Golden-test the renderer at several widths using the ASCII palette proposed below.
 
-## 8. Make failure and freshness states unambiguous
+## 7. Make failure and freshness states unambiguous
 
 **Priority:** P0
 
@@ -181,7 +155,7 @@ Model local inspection, remote relationship, fetch activity, and data freshness 
 - Sanitize control characters in Git diagnostics before displaying them in a terminal.
 - Keep detailed failures available without turning the main table into a log viewer.
 
-## 9. Make every non-ASCII glyph deliberate and detectable
+## 8. Make every non-ASCII glyph deliberate and detectable
 
 **Priority:** P1
 
@@ -213,7 +187,7 @@ Unicode       ASCII
 - Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
 - Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
 
-## 10. Test behavior with disposable real Git repositories
+## 9. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -234,7 +208,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 11. Add one-shot output by reusing the same snapshot model
+## 10. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -254,7 +228,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 12. Add scan exclusions only when traversal data justifies them
+## 11. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -276,4 +250,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Implement proposals 1–4 as the first local-status milestone, then 5–8 to complete the responsive version 0.1 dashboard. Proposals 9 and 10 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 11 is the smallest useful extension once the interactive core is stable. Proposal 12 should remain deferred until measured traversal problems appear.
+Implement proposals 1–3 to harden the local-status milestone, then 4–7 to complete the responsive version 0.1 dashboard. Proposals 8 and 9 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 10 is the smallest useful extension once the interactive core is stable. Proposal 11 should remain deferred until measured traversal problems appear.
