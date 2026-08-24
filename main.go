@@ -1,0 +1,344 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"text/tabwriter"
+	"time"
+	"unicode"
+)
+
+const localStatusTimeout = 5 * time.Second
+
+type repoStatus struct {
+	Path        string
+	Branch      string
+	Modified    int
+	Untracked   int
+	Ahead       int
+	Behind      int
+	HasUpstream bool
+	Error       string
+}
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("repotop", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [directory]") }
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() > 1 {
+		fmt.Fprintln(stderr, "repotop: expected at most one directory")
+		flags.Usage()
+		return 2
+	}
+
+	root := "."
+	if flags.NArg() == 1 {
+		root = flags.Arg(0)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "repotop: %v\n", err)
+		return 1
+	}
+	info, err := os.Stat(absRoot)
+	if err != nil {
+		fmt.Fprintf(stderr, "repotop: %s: %v\n", safeCell(root), err)
+		return 1
+	}
+	if !info.IsDir() {
+		fmt.Fprintf(stderr, "repotop: %s: not a directory\n", safeCell(root))
+		return 1
+	}
+
+	repositories, scanErrors := discover(absRoot)
+	for _, scanErr := range scanErrors {
+		fmt.Fprintf(stderr, "warning: %s\n", oneLine(scanErr.Error()))
+	}
+	if len(repositories) == 0 {
+		fmt.Fprintf(stdout, "no Git repositories found beneath %s\n", safeCell(absRoot))
+		return 0
+	}
+
+	statuses := make([]repoStatus, 0, len(repositories))
+	for _, repository := range repositories {
+		status := inspectRepository(absRoot, repository)
+		statuses = append(statuses, status)
+		if status.Error != "" {
+			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
+		}
+	}
+	sortStatuses(statuses)
+	if err := render(stdout, statuses); err != nil {
+		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func discover(root string) ([]string, []error) {
+	var repositories []string
+	var scanErrors []error
+
+	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", path, walkErr))
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+
+		gitMarker := filepath.Join(path, ".git")
+		markerInfo, err := os.Lstat(gitMarker)
+		switch {
+		case err == nil && (markerInfo.IsDir() || markerInfo.Mode().IsRegular()):
+			repositories = append(repositories, path)
+			return fs.SkipDir
+		case err != nil && !errors.Is(err, fs.ErrNotExist):
+			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", gitMarker, err))
+			return fs.SkipDir
+		default:
+			return nil
+		}
+	})
+	if walkErr != nil {
+		scanErrors = append(scanErrors, walkErr)
+	}
+	sort.Strings(repositories)
+	return repositories, scanErrors
+}
+
+func inspectRepository(root, repository string) repoStatus {
+	relative, err := filepath.Rel(root, repository)
+	if err != nil {
+		relative = repository
+	}
+	status := repoStatus{Path: filepath.ToSlash(relative), Branch: "unknown"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), localStatusTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repository, "status", "--porcelain=v2", "--branch", "-z")
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C")
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		status.Error = "git status timed out"
+		return status
+	}
+	if err != nil {
+		detail := oneLine(string(output))
+		if detail == "" {
+			detail = err.Error()
+		}
+		status.Error = detail
+		return status
+	}
+
+	parsed, err := parsePorcelain(output)
+	if err != nil {
+		status.Error = err.Error()
+		return status
+	}
+	parsed.Path = status.Path
+	return parsed
+}
+
+func parsePorcelain(output []byte) (repoStatus, error) {
+	status := repoStatus{Branch: "unknown"}
+	records := bytes.Split(output, []byte{0})
+	for index := 0; index < len(records); index++ {
+		if len(records[index]) == 0 {
+			continue
+		}
+		record := string(records[index])
+		switch {
+		case strings.HasPrefix(record, "# branch.head "):
+			status.Branch = strings.TrimPrefix(record, "# branch.head ")
+			if status.Branch == "(detached)" {
+				status.Branch = "detached"
+			}
+		case strings.HasPrefix(record, "# branch.upstream "):
+			status.HasUpstream = true
+		case strings.HasPrefix(record, "# branch.ab "):
+			if _, err := fmt.Sscanf(strings.TrimPrefix(record, "# branch.ab "), "+%d -%d", &status.Ahead, &status.Behind); err != nil {
+				return repoStatus{}, fmt.Errorf("parse branch distance: %w", err)
+			}
+		case strings.HasPrefix(record, "# "):
+			// Porcelain v2 permits future headers; unknown headers are ignored.
+		case record[0] == '1' || record[0] == 'u':
+			if err := validateChangedRecord(record); err != nil {
+				return repoStatus{}, err
+			}
+			status.Modified++
+		case record[0] == '2':
+			if err := validateChangedRecord(record); err != nil {
+				return repoStatus{}, err
+			}
+			if index+1 >= len(records) || len(records[index+1]) == 0 {
+				return repoStatus{}, errors.New("parse renamed path: missing original path")
+			}
+			status.Modified++
+			index++
+		case record[0] == '?':
+			status.Untracked++
+		case record[0] == '!':
+		default:
+			return repoStatus{}, fmt.Errorf("unknown porcelain record type %q", record[0])
+		}
+	}
+	return status, nil
+}
+
+func validateChangedRecord(record string) error {
+	fields := strings.Fields(record)
+	if len(fields) < 2 || len(fields[1]) != 2 {
+		return fmt.Errorf("malformed porcelain record %q", safeCell(record))
+	}
+	return nil
+}
+
+func sortStatuses(statuses []repoStatus) {
+	sort.Slice(statuses, func(i, j int) bool {
+		left, right := severity(statuses[i]), severity(statuses[j])
+		if left != right {
+			return left < right
+		}
+		return statuses[i].Path < statuses[j].Path
+	})
+}
+
+func severity(status repoStatus) int {
+	switch {
+	case status.Error != "":
+		return 0
+	case status.Behind > 0:
+		return 1
+	case status.Modified > 0 || status.Untracked > 0:
+		return 2
+	case status.Ahead > 0:
+		return 3
+	case !status.HasUpstream:
+		return 4
+	default:
+		return 5
+	}
+}
+
+func render(output io.Writer, statuses []repoStatus) error {
+	writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(writer, "REPOSITORY\tBRANCH\tWORKTREE\tREMOTE"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(writer, "----------\t------\t--------\t------"); err != nil {
+		return err
+	}
+
+	clean, dirty, ahead, behind, failures := 0, 0, 0, 0, 0
+	for _, status := range statuses {
+		branch := status.Branch
+		if status.Error != "" {
+			failures++
+			branch = "-"
+		} else if status.Modified == 0 && status.Untracked == 0 {
+			clean++
+		} else {
+			dirty++
+		}
+		if status.Ahead > 0 {
+			ahead++
+		}
+		if status.Behind > 0 {
+			behind++
+		}
+		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n",
+			safeCell(status.Path), safeCell(branch), worktreeText(status), remoteText(status)); err != nil {
+			return err
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(output, "\n%d %s  %d clean  %d dirty  %d ahead  %d behind  %d %s\n",
+		len(statuses), plural(len(statuses), "repo"), clean, dirty, ahead, behind, failures, plural(failures, "error"))
+	return err
+}
+
+func plural(count int, singular string) string {
+	if count == 1 {
+		return singular
+	}
+	return singular + "s"
+}
+
+func worktreeText(status repoStatus) string {
+	if status.Error != "" {
+		return "error"
+	}
+	var parts []string
+	if status.Modified > 0 {
+		parts = append(parts, fmt.Sprintf("M%d", status.Modified))
+	}
+	if status.Untracked > 0 {
+		parts = append(parts, fmt.Sprintf("?%d", status.Untracked))
+	}
+	if len(parts) == 0 {
+		return "clean"
+	}
+	return strings.Join(parts, " ")
+}
+
+func remoteText(status repoStatus) string {
+	if status.Error != "" {
+		return "error"
+	}
+	if !status.HasUpstream {
+		return "no upstream"
+	}
+	var parts []string
+	if status.Ahead > 0 {
+		parts = append(parts, fmt.Sprintf("+%d", status.Ahead))
+	}
+	if status.Behind > 0 {
+		parts = append(parts, fmt.Sprintf("-%d", status.Behind))
+	}
+	if len(parts) == 0 {
+		return "ok"
+	}
+	return strings.Join(parts, " ")
+}
+
+func safeCell(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return '?'
+		}
+		return r
+	}, value)
+}
+
+func oneLine(value string) string {
+	return strings.Join(strings.Fields(value), " ")
+}
