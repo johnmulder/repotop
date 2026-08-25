@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -154,19 +153,9 @@ func inspectRepository(root, repository string) repoStatus {
 
 	ctx, cancel := context.WithTimeout(context.Background(), localStatusTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", repository, "status", "--porcelain=v2", "--branch", "-z")
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C")
-	output, err := cmd.CombinedOutput()
-	if ctx.Err() != nil {
-		status.Error = "git status timed out"
-		return status
-	}
+	output, err := runGit(ctx, repository, true, "status", "--porcelain=v2", "--branch", "-z")
 	if err != nil {
-		detail := oneLine(string(output))
-		if detail == "" {
-			detail = err.Error()
-		}
-		status.Error = detail
+		status.Error = err.Error()
 		return status
 	}
 

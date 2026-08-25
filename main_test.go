@@ -266,12 +266,14 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 		t.Skip("git is required")
 	}
 	repository := t.TempDir()
-	runGit(t, repository, "init", "-b", "main")
+	runTestGit(t, repository, "init", "-b", "main")
+	runTestGit(t, repository, "config", "user.name", "Repotop Test")
+	runTestGit(t, repository, "config", "user.email", "repotop@example.invalid")
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "initial\n")
-	runGit(t, repository, "add", "tracked.txt")
-	runGit(t, repository, "-c", "user.name=Repotop Test", "-c", "user.email=repotop@example.invalid", "commit", "-m", "initial")
+	runTestGit(t, repository, "add", "tracked.txt")
+	runTestGit(t, repository, "commit", "-m", "initial")
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "staged\n")
-	runGit(t, repository, "add", "tracked.txt")
+	runTestGit(t, repository, "add", "tracked.txt")
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "modified again\n")
 	mustWrite(t, filepath.Join(repository, "untracked.txt"), "new\n")
 
@@ -292,7 +294,7 @@ func TestInspectDiscoveredRepositoryThatDisappears(t *testing.T) {
 	root := t.TempDir()
 	repository := filepath.Join(root, "repo")
 	mustMkdir(t, repository)
-	runGit(t, repository, "init", "-b", "main")
+	runTestGit(t, repository, "init", "-b", "main")
 
 	repositories, scanErrors, err := discover(context.Background(), root)
 	if err != nil || len(scanErrors) != 0 || !reflect.DeepEqual(repositories, []string{repository}) {
@@ -320,11 +322,10 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-func runGit(t *testing.T, directory string, args ...string) {
+func runTestGit(t *testing.T, directory, operation string, args ...string) {
 	t.Helper()
-	commandArgs := append([]string{"-C", directory}, args...)
-	output, err := exec.Command("git", commandArgs...).CombinedOutput()
+	output, err := runGit(context.Background(), directory, false, operation, args...)
 	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+		t.Fatalf("git %s %s: %v\n%s", operation, strings.Join(args, " "), err, output)
 	}
 }
