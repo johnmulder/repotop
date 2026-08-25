@@ -23,7 +23,10 @@ const localStatusTimeout = 5 * time.Second
 type repoStatus struct {
 	Path        string
 	Branch      string
+	Changed     int
+	Staged      int
 	Modified    int
+	Conflicted  int
 	Untracked   int
 	Ahead       int
 	Behind      int
@@ -198,20 +201,29 @@ func parsePorcelain(output []byte) (repoStatus, error) {
 			}
 		case strings.HasPrefix(record, "# "):
 			// Porcelain v2 permits future headers; unknown headers are ignored.
-		case record[0] == '1' || record[0] == 'u':
-			if err := validateChangedRecord(record); err != nil {
+		case record[0] == '1' || record[0] == '2':
+			indexStatus, worktreeStatus, err := changedStates(record)
+			if err != nil {
 				return repoStatus{}, err
 			}
-			status.Modified++
-		case record[0] == '2':
-			if err := validateChangedRecord(record); err != nil {
+			status.Changed++
+			if indexStatus != '.' {
+				status.Staged++
+			}
+			if worktreeStatus != '.' {
+				status.Modified++
+			}
+			if record[0] == '2' {
+				if index+1 >= len(records) || len(records[index+1]) == 0 {
+					return repoStatus{}, errors.New("parse renamed path: missing original path")
+				}
+				index++
+			}
+		case record[0] == 'u':
+			if _, _, err := changedStates(record); err != nil {
 				return repoStatus{}, err
 			}
-			if index+1 >= len(records) || len(records[index+1]) == 0 {
-				return repoStatus{}, errors.New("parse renamed path: missing original path")
-			}
-			status.Modified++
-			index++
+			status.Conflicted++
 		case record[0] == '?':
 			status.Untracked++
 		case record[0] == '!':
@@ -222,12 +234,12 @@ func parsePorcelain(output []byte) (repoStatus, error) {
 	return status, nil
 }
 
-func validateChangedRecord(record string) error {
+func changedStates(record string) (byte, byte, error) {
 	fields := strings.Fields(record)
 	if len(fields) < 2 || len(fields[1]) != 2 {
-		return fmt.Errorf("malformed porcelain record %q", safeCell(record))
+		return 0, 0, fmt.Errorf("malformed porcelain record %q", safeCell(record))
 	}
-	return nil
+	return fields[1][0], fields[1][1], nil
 }
 
 func sortStatuses(statuses []repoStatus) {
@@ -246,7 +258,7 @@ func severity(status repoStatus) int {
 		return 0
 	case status.Behind > 0:
 		return 1
-	case status.Modified > 0 || status.Untracked > 0:
+	case status.dirty():
 		return 2
 	case status.Ahead > 0:
 		return 3
@@ -272,7 +284,7 @@ func render(output io.Writer, statuses []repoStatus) error {
 		if status.Error != "" {
 			failures++
 			branch = "-"
-		} else if status.Modified == 0 && status.Untracked == 0 {
+		} else if !status.dirty() {
 			clean++
 		} else {
 			dirty++
@@ -303,13 +315,20 @@ func plural(count int, singular string) string {
 	return singular + "s"
 }
 
+func (status repoStatus) dirty() bool {
+	return status.Changed > 0 || status.Conflicted > 0 || status.Untracked > 0
+}
+
 func worktreeText(status repoStatus) string {
 	if status.Error != "" {
 		return "error"
 	}
 	var parts []string
-	if status.Modified > 0 {
-		parts = append(parts, fmt.Sprintf("M%d", status.Modified))
+	if status.Conflicted > 0 {
+		parts = append(parts, fmt.Sprintf("C%d", status.Conflicted))
+	}
+	if status.Changed > 0 {
+		parts = append(parts, fmt.Sprintf("M%d", status.Changed))
 	}
 	if status.Untracked > 0 {
 		parts = append(parts, fmt.Sprintf("?%d", status.Untracked))

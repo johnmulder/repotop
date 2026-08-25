@@ -133,16 +133,22 @@ func TestParsePorcelain(t *testing.T) {
 		"# branch.upstream origin/feature/test",
 		"# branch.ab +2 -3",
 		"1 M. N... 100644 100644 100644 abc def staged.txt",
-		"1 .M N... 100644 100644 100644 abc def modified.txt",
+		"1 .M N... 100644 100644 100644 abc def strange\tline\ncaf\u00e9.txt",
+		"1 MM N... 100644 100644 100644 abc def both.txt",
 		"2 R. N... 100644 100644 100644 abc def R100 renamed.txt",
-		"old.txt",
-		"? untracked file.txt",
+		"# branch.ab +99 -99",
+		"2 C. N... 100644 100644 100644 abc def C100 copied.txt",
+		"copy source.txt",
+		"u UU N... 100644 100644 100644 100644 abc def ghi conflicted.txt",
+		"? untracked\nfile.txt",
+		"! ignored.txt",
 	}
 	status, err := parsePorcelain([]byte(strings.Join(records, "\x00") + "\x00"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Branch != "feature/test" || !status.HasUpstream || status.Ahead != 2 || status.Behind != 3 || status.Modified != 3 || status.Untracked != 1 {
+	if status.Branch != "feature/test" || !status.HasUpstream || status.Ahead != 2 || status.Behind != 3 ||
+		status.Changed != 5 || status.Staged != 4 || status.Modified != 2 || status.Conflicted != 1 || status.Untracked != 1 {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 }
@@ -158,6 +164,12 @@ func TestParseDetachedHeadAndMalformedDistance(t *testing.T) {
 	if _, err := parsePorcelain([]byte("# branch.ab invalid\x00")); err == nil {
 		t.Fatal("expected malformed branch distance error")
 	}
+	if _, err := parsePorcelain([]byte("1 malformed\x00")); err == nil {
+		t.Fatal("expected malformed changed record error")
+	}
+	if _, err := parsePorcelain([]byte("2 R. N... new.txt\x00")); err == nil {
+		t.Fatal("expected missing rename source error")
+	}
 }
 
 func TestSortStatuses(t *testing.T) {
@@ -165,8 +177,9 @@ func TestSortStatuses(t *testing.T) {
 		{Path: "clean", HasUpstream: true},
 		{Path: "missing"},
 		{Path: "ahead", Ahead: 1, HasUpstream: true},
-		{Path: "dirty-b", Modified: 1, HasUpstream: true},
+		{Path: "dirty-b", Changed: 1, HasUpstream: true},
 		{Path: "dirty-a", Untracked: 1, HasUpstream: true},
+		{Path: "conflict", Conflicted: 1, HasUpstream: true},
 		{Path: "behind", Behind: 1, HasUpstream: true},
 		{Path: "error", Error: "broken"},
 	}
@@ -175,7 +188,7 @@ func TestSortStatuses(t *testing.T) {
 	for _, status := range statuses {
 		got = append(got, status.Path)
 	}
-	want := []string{"error", "behind", "dirty-a", "dirty-b", "ahead", "missing", "clean"}
+	want := []string{"error", "behind", "conflict", "dirty-a", "dirty-b", "ahead", "missing", "clean"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("sort = %v, want %v", got, want)
 	}
@@ -183,7 +196,7 @@ func TestSortStatuses(t *testing.T) {
 
 func TestRender(t *testing.T) {
 	statuses := []repoStatus{
-		{Path: "dirty", Branch: "topic", Modified: 1, Untracked: 2, Ahead: 2, Behind: 1, HasUpstream: true},
+		{Path: "dirty", Branch: "topic", Changed: 1, Staged: 1, Modified: 1, Conflicted: 1, Untracked: 2, Ahead: 2, Behind: 1, HasUpstream: true},
 		{Path: "clean", Branch: "main", HasUpstream: true},
 	}
 	var output bytes.Buffer
@@ -192,7 +205,7 @@ func TestRender(t *testing.T) {
 	}
 	want := "REPOSITORY  BRANCH  WORKTREE  REMOTE\n" +
 		"----------  ------  --------  ------\n" +
-		"dirty       topic   M1 ?2     +2 -1\n" +
+		"dirty       topic   C1 M1 ?2  +2 -1\n" +
 		"clean       main    clean     ok\n" +
 		"\n2 repos  1 clean  1 dirty  1 ahead  1 behind  0 errors\n"
 	if output.String() != want {
@@ -257,14 +270,17 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "initial\n")
 	runGit(t, repository, "add", "tracked.txt")
 	runGit(t, repository, "-c", "user.name=Repotop Test", "-c", "user.email=repotop@example.invalid", "commit", "-m", "initial")
-	mustWrite(t, filepath.Join(repository, "tracked.txt"), "changed\n")
+	mustWrite(t, filepath.Join(repository, "tracked.txt"), "staged\n")
+	runGit(t, repository, "add", "tracked.txt")
+	mustWrite(t, filepath.Join(repository, "tracked.txt"), "modified again\n")
 	mustWrite(t, filepath.Join(repository, "untracked.txt"), "new\n")
 
 	status := inspectRepository(repository, repository)
 	if status.Error != "" {
 		t.Fatalf("inspect error: %s", status.Error)
 	}
-	if status.Path != "." || status.Branch != "main" || status.Modified != 1 || status.Untracked != 1 || status.HasUpstream {
+	if status.Path != "." || status.Branch != "main" || status.Changed != 1 || status.Staged != 1 || status.Modified != 1 ||
+		status.Conflicted != 0 || status.Untracked != 1 || status.HasUpstream {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 }

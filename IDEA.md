@@ -204,8 +204,10 @@ For each repository, collect a small normalized record:
 path
 branch
 detached
-modified
+changed
 staged
+modified
+conflicted
 untracked
 upstream
 ahead
@@ -221,7 +223,7 @@ Prefer Git's stable plumbing or machine-readable interfaces rather than parsing 
 Likely commands include:
 
 ```bash
-git status --porcelain=v2 --branch
+git status --porcelain=v2 --branch -z
 git rev-parse --show-toplevel
 git fetch --prune
 ```
@@ -229,6 +231,16 @@ git fetch --prune
 Where useful, combine queries to minimize subprocess creation.
 
 Git itself should remain the source of truth.
+
+Local counts have exact path-based semantics derived from porcelain v2 records:
+
+- `changed`: non-conflicted tracked paths represented by ordinary (`1`) or rename/copy (`2`) records; each path counts once even when both index and worktree state changed
+- `staged`: non-conflicted records whose index (`X`) status is not `.`
+- `modified`: non-conflicted records whose worktree (`Y`) status is not `.`
+- `conflicted`: unmerged (`u`) records, kept separate from other tracked changes
+- `untracked`: untracked (`?`) records
+
+A path may count as both staged and modified, but it still counts only once as changed. Ignored (`!`) records do not affect the model. The compact `M` display uses `changed`, while conflicts use a separate `C` display.
 
 ## Sorting
 
@@ -257,7 +269,8 @@ The display should distinguish at least these cases:
 ↑2           two commits ahead
 ↓3           three commits behind
 ↑1 ↓2        diverged
-M2           two modified files
+M2           two non-conflicted tracked paths changed
+C1           one conflicted path
 ?3           three untracked files
 no upstream  branch does not track an upstream
 no remote    repository has no usable remote
