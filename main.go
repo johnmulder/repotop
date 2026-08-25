@@ -71,7 +71,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	repositories, scanErrors := discover(absRoot)
+	repositories, scanErrors, err := discover(context.Background(), absRoot)
+	if err != nil {
+		fmt.Fprintf(stderr, "repotop: scan: %v\n", err)
+		return 1
+	}
 	for _, scanErr := range scanErrors {
 		fmt.Fprintf(stderr, "warning: %s\n", oneLine(scanErr.Error()))
 	}
@@ -96,11 +100,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func discover(root string) ([]string, []error) {
+func discover(ctx context.Context, root string) ([]string, []error, error) {
 	var repositories []string
 	var scanErrors []error
 
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if walkErr != nil {
 			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", path, walkErr))
 			if entry != nil && entry.IsDir() {
@@ -125,11 +132,14 @@ func discover(root string) ([]string, []error) {
 			return nil
 		}
 	})
+	sort.Strings(repositories)
+	if err := ctx.Err(); err != nil {
+		return repositories, scanErrors, err
+	}
 	if walkErr != nil {
 		scanErrors = append(scanErrors, walkErr)
 	}
-	sort.Strings(repositories)
-	return repositories, scanErrors
+	return repositories, scanErrors, nil
 }
 
 func inspectRepository(root, repository string) repoStatus {

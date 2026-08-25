@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +22,10 @@ func TestDiscover(t *testing.T) {
 	mustWrite(t, filepath.Join(worktree, ".git"), "gitdir: elsewhere\n")
 	mustMkdir(t, filepath.Join(root, "ordinary"))
 
-	repositories, scanErrors := discover(root)
+	repositories, scanErrors, err := discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(scanErrors) != 0 {
 		t.Fatalf("discover errors: %v", scanErrors)
 	}
@@ -35,12 +40,89 @@ func TestDiscoverRootRepository(t *testing.T) {
 	mustMkdir(t, filepath.Join(root, ".git"))
 	mustMkdir(t, filepath.Join(root, "nested", ".git"))
 
-	repositories, scanErrors := discover(root)
+	repositories, scanErrors, err := discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(scanErrors) != 0 {
 		t.Fatalf("discover errors: %v", scanErrors)
 	}
 	if !reflect.DeepEqual(repositories, []string{root}) {
 		t.Fatalf("discover() = %v, want root only", repositories)
+	}
+}
+
+func TestDiscoverDoesNotFollowSymlinks(t *testing.T) {
+	root := t.TempDir()
+	repository := filepath.Join(root, "repo")
+	mustMkdir(t, filepath.Join(repository, ".git"))
+
+	external := t.TempDir()
+	mustMkdir(t, filepath.Join(external, ".git"))
+	if err := os.Symlink(external, filepath.Join(root, "linked-repo")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(root, filepath.Join(root, "loop")); err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(root, "fake")
+	mustMkdir(t, fake)
+	if err := os.Symlink(filepath.Join(external, ".git"), filepath.Join(fake, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	repositories, scanErrors, err := discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scanErrors) != 0 {
+		t.Fatalf("discover errors: %v", scanErrors)
+	}
+	if !reflect.DeepEqual(repositories, []string{repository}) {
+		t.Fatalf("discover() = %v, want only %s", repositories, repository)
+	}
+
+	repositories, scanErrors, err = discover(context.Background(), filepath.Join(root, "linked-repo"))
+	if err != nil || len(scanErrors) != 0 || len(repositories) != 0 {
+		t.Fatalf("symlink root: repositories=%v errors=%v fatal=%v", repositories, scanErrors, err)
+	}
+}
+
+func TestDiscoverCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	repositories, scanErrors, err := discover(ctx, t.TempDir())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("discover error = %v, want context canceled", err)
+	}
+	if len(repositories) != 0 || len(scanErrors) != 0 {
+		t.Fatalf("canceled discover returned repositories=%v errors=%v", repositories, scanErrors)
+	}
+}
+
+func TestDiscoverContinuesAfterInaccessibleDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse permissionless directories")
+	}
+	root := t.TempDir()
+	blocked := filepath.Join(root, "blocked")
+	repository := filepath.Join(root, "repo")
+	mustMkdir(t, blocked)
+	mustMkdir(t, filepath.Join(repository, ".git"))
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
+
+	repositories, scanErrors, err := discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(repositories, []string{repository}) {
+		t.Fatalf("discover() = %v, want %s", repositories, repository)
+	}
+	if len(scanErrors) == 0 {
+		t.Fatal("expected inaccessible-directory warning")
 	}
 }
 
@@ -184,6 +266,27 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 	}
 	if status.Path != "." || status.Branch != "main" || status.Modified != 1 || status.Untracked != 1 || status.HasUpstream {
 		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+func TestInspectDiscoveredRepositoryThatDisappears(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is required")
+	}
+	root := t.TempDir()
+	repository := filepath.Join(root, "repo")
+	mustMkdir(t, repository)
+	runGit(t, repository, "init", "-b", "main")
+
+	repositories, scanErrors, err := discover(context.Background(), root)
+	if err != nil || len(scanErrors) != 0 || !reflect.DeepEqual(repositories, []string{repository}) {
+		t.Fatalf("discover: repositories=%v errors=%v fatal=%v", repositories, scanErrors, err)
+	}
+	if err := os.RemoveAll(repository); err != nil {
+		t.Fatal(err)
+	}
+	if status := inspectRepository(root, repository); status.Error == "" {
+		t.Fatalf("inspect missing repository = %+v, want repository-local error", status)
 	}
 }
 
