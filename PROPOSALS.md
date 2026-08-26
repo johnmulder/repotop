@@ -8,28 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Make remote refresh bounded, deduplicated, and noninteractive
-
-**Priority:** P0
-
-### Gap
-
-The idea calls for asynchronous `git fetch`, but a simple timer that enqueues every repository can create duplicate work, exhaust network or credential-helper capacity, and allow a prompt or slow remote to occupy a worker forever.
-
-### Approach
-
-Use a small fixed fetch worker pool and at most one queued or active fetch per repository. Schedule initial fetches only after local results are visible, coalesce timer and manual requests, and update ahead/behind status as each fetch completes.
-
-### Implementation considerations
-
-- Start with four fetch workers and keep the value internal until measurement justifies an option.
-- Use `git fetch --prune` as the only intentional repository mutation and document that it updates remote-tracking refs.
-- Set `GIT_TERMINAL_PROMPT=0` for background work so authentication needs become visible failures instead of invisible hangs.
-- Apply a network timeout and ensure quitting cancels queued and active work promptly.
-- Respect `--no-fetch` completely, including startup and the periodic timer; define whether pressing `f` remains disabled or explicitly overrides it.
-- Track last attempt, last success, duration, and concise failure independently for each repository.
-
-## 2. Render progressive results deterministically
+## 1. Render progressive results deterministically
 
 **Priority:** P0
 
@@ -50,7 +29,7 @@ Make rendering a pure transformation from a snapshot plus terminal dimensions to
 - Make color a presentation layer over authoritative text.
 - Golden-test the renderer at several widths using the ASCII palette proposed below.
 
-## 3. Make failure and freshness states unambiguous
+## 2. Make failure and freshness states unambiguous
 
 **Priority:** P0
 
@@ -71,7 +50,7 @@ Model local inspection, remote relationship, fetch activity, and data freshness 
 - Sanitize control characters in Git diagnostics before displaying them in a terminal.
 - Keep detailed failures available without turning the main table into a log viewer.
 
-## 4. Make every non-ASCII glyph deliberate and detectable
+## 3. Make every non-ASCII glyph deliberate and detectable
 
 **Priority:** P1
 
@@ -103,7 +82,7 @@ Unicode       ASCII
 - Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
 - Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
 
-## 5. Test behavior with disposable real Git repositories
+## 4. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -124,7 +103,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 6. Add one-shot output by reusing the same snapshot model
+## 5. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -144,7 +123,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 7. Add scan exclusions only when traversal data justifies them
+## 6. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -166,4 +145,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Implement proposals 1–3 to complete the responsive version 0.1 dashboard. Proposals 4 and 5 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 6 is the smallest useful extension once the interactive core is stable. Proposal 7 should remain deferred until measured traversal problems appear.
+Implement proposals 1–2 to complete the responsive version 0.1 dashboard. Proposals 3 and 4 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 5 is the smallest useful extension once the interactive core is stable. Proposal 6 should remain deferred until measured traversal problems appear.
