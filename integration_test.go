@@ -55,6 +55,69 @@ func TestInspectBrokenRealGitRepository(t *testing.T) {
 	}
 }
 
+func TestInspectAndRefreshRealGitRemoteStates(t *testing.T) {
+	root, remote, publisher := newBareRemote(t)
+	aheadRepository := cloneRealRepository(t, root, remote, "ahead")
+	behindRepository := cloneRealRepository(t, root, remote, "behind")
+
+	clean := inspectRepository(context.Background(), aheadRepository, aheadRepository)
+	if clean.Error != "" || !clean.HasRemote || !clean.HasUpstream || clean.Ahead != 0 || clean.Behind != 0 {
+		t.Fatalf("clean tracked remote status: %+v", clean)
+	}
+	commitRealFile(t, aheadRepository, "ahead.txt", "ahead\n", "ahead commit")
+	ahead := inspectRepository(context.Background(), aheadRepository, aheadRepository)
+	if ahead.Error != "" || ahead.Ahead != 1 || ahead.Behind != 0 {
+		t.Fatalf("ahead status: %+v", ahead)
+	}
+
+	commitRealFile(t, publisher, "behind.txt", "behind\n", "remote commit")
+	runTestGit(t, publisher, "push", "origin", "main")
+	coordinator := newRepositoryCoordinator()
+	generation := coordinator.beginScan()
+	coordinator.apply(repositoryUpdate{
+		Generation: generation,
+		Repository: behindRepository,
+		Status:     inspectRepository(context.Background(), behindRepository, behindRepository),
+	})
+	coordinator.completeScan(generation, []string{behindRepository})
+	if err := refreshRemotes(context.Background(), coordinator, behindRepository, []string{behindRepository}, fetchRepository, inspectRepository, nil); err != nil {
+		t.Fatal(err)
+	}
+	behind := coordinator.snapshot()[0]
+	if behind.Error != "" || behind.Ahead != 0 || behind.Behind != 1 || behind.Fetch.Error != "" || behind.Fetch.LastSuccess.IsZero() {
+		t.Fatalf("refreshed behind status: %+v", behind)
+	}
+
+	if err := fetchRepository(context.Background(), aheadRepository); err != nil {
+		t.Fatal(err)
+	}
+	diverged := inspectRepository(context.Background(), aheadRepository, aheadRepository)
+	if diverged.Error != "" || diverged.Ahead != 1 || diverged.Behind != 1 {
+		t.Fatalf("diverged status: %+v", diverged)
+	}
+}
+
+func TestRealGitFetchPrunesDeletedRemoteBranch(t *testing.T) {
+	root, remote, publisher := newBareRemote(t)
+	repository := cloneRealRepository(t, root, remote, "consumer")
+	runTestGit(t, publisher, "checkout", "-b", "obsolete")
+	commitRealFile(t, publisher, "obsolete.txt", "obsolete\n", "obsolete branch")
+	runTestGit(t, publisher, "push", "-u", "origin", "obsolete")
+
+	if err := fetchRepository(context.Background(), repository); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, repository, "show-ref", "--verify", "refs/remotes/origin/obsolete")
+	runTestGit(t, publisher, "checkout", "main")
+	runTestGit(t, publisher, "push", "origin", "--delete", "obsolete")
+	if err := fetchRepository(context.Background(), repository); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runGit(context.Background(), repository, true, "show-ref", "--verify", "refs/remotes/origin/obsolete"); err == nil {
+		t.Fatal("deleted remote branch was not pruned")
+	}
+}
+
 func requireRealGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -74,8 +137,7 @@ func initRealRepository(t *testing.T, repository string) {
 	requireRealGit(t)
 	mustMkdir(t, repository)
 	runTestGit(t, repository, "init", "-b", "main")
-	runTestGit(t, repository, "config", "user.name", "Repotop Test")
-	runTestGit(t, repository, "config", "user.email", "repotop@example.invalid")
+	configureRealRepository(t, repository)
 }
 
 func commitRealFile(t *testing.T, repository, name, content, message string) {
@@ -83,4 +145,36 @@ func commitRealFile(t *testing.T, repository, name, content, message string) {
 	mustWrite(t, filepath.Join(repository, name), content)
 	runTestGit(t, repository, "add", name)
 	runTestGit(t, repository, "commit", "-m", message)
+}
+
+func configureRealRepository(t *testing.T, repository string) {
+	t.Helper()
+	runTestGit(t, repository, "config", "user.name", "Repotop Test")
+	runTestGit(t, repository, "config", "user.email", "repotop@example.invalid")
+	runTestGit(t, repository, "config", "commit.gpgSign", "false")
+	runTestGit(t, repository, "config", "core.autocrlf", "false")
+	runTestGit(t, repository, "config", "core.hooksPath", t.TempDir())
+	runTestGit(t, repository, "config", "protocol.file.allow", "always")
+}
+
+func newBareRemote(t *testing.T) (root, remote, publisher string) {
+	t.Helper()
+	requireRealGit(t)
+	root = t.TempDir()
+	remote = filepath.Join(root, "remote.git")
+	runTestGit(t, root, "init", "--bare", "-b", "main", remote)
+	publisher = filepath.Join(root, "publisher")
+	initRealRepository(t, publisher)
+	commitRealFile(t, publisher, "initial.txt", "initial\n", "initial")
+	runTestGit(t, publisher, "remote", "add", "origin", remote)
+	runTestGit(t, publisher, "push", "-u", "origin", "main")
+	return root, remote, publisher
+}
+
+func cloneRealRepository(t *testing.T, root, remote, name string) string {
+	t.Helper()
+	repository := filepath.Join(root, name)
+	runTestGit(t, root, "-c", "protocol.file.allow=always", "clone", "--branch", "main", remote, repository)
+	configureRealRepository(t, repository)
+	return repository
 }
