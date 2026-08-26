@@ -59,6 +59,10 @@ func TestCoordinatorKeepsFetchMetadataSeparate(t *testing.T) {
 	generation := coordinator.beginScan()
 	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo", Branch: "main", Ahead: 2}})
 	coordinator.completeScan(generation, []string{"/repo"})
+	coordinator.beginFetch([]string{"/repo"})
+	if !coordinator.snapshot()[0].Fetching {
+		t.Fatal("fetch activity was not exposed")
+	}
 
 	firstAttempt := time.Unix(10, 0)
 	firstSuccess := time.Unix(12, 0)
@@ -176,7 +180,7 @@ func TestRefreshRemotesBoundsDeduplicatesAndIsolatesFailures(t *testing.T) {
 func TestRefreshRemotesCancellation(t *testing.T) {
 	coordinator := newRepositoryCoordinator()
 	generation := coordinator.beginScan()
-	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo"}})
+	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo", HasRemote: true, HasUpstream: true}})
 	coordinator.completeScan(generation, []string{"/repo"})
 
 	ctx, cancel := context.WithCancel(context.Background())

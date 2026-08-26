@@ -14,7 +14,7 @@ func TestSnapshotEmitterPublishesFirstCoalescesAndFinishes(t *testing.T) {
 	generation := coordinator.beginScan()
 	now := time.Unix(100, 0)
 	var sizes []int
-	emitter := newSnapshotEmitter(coordinator, func(statuses []repoStatus) {
+	emitter := newSnapshotEmitter(coordinator, func(statuses []repositorySnapshot) {
 		sizes = append(sizes, len(statuses))
 	}, func() time.Time { return now })
 
@@ -45,12 +45,12 @@ func TestSnapshotEmitterPublishesFirstCoalescesAndFinishes(t *testing.T) {
 func TestRefreshPipelinesPublishProgressAndCompletion(t *testing.T) {
 	repositories := []string{filepath.Join("/root", "a"), filepath.Join("/root", "b")}
 	coordinator := newRepositoryCoordinator()
-	var localSnapshots [][]repoStatus
+	var localSnapshots [][]repositorySnapshot
 	inspect := func(_ context.Context, _, repository string) repoStatus {
 		return repoStatus{Path: filepath.Base(repository), Branch: "main", Ahead: 2, HasUpstream: true}
 	}
-	if err := refreshRepositories(context.Background(), coordinator, "/root", repositories, inspect, func(statuses []repoStatus) {
-		localSnapshots = append(localSnapshots, append([]repoStatus(nil), statuses...))
+	if err := refreshRepositories(context.Background(), coordinator, "/root", repositories, inspect, func(statuses []repositorySnapshot) {
+		localSnapshots = append(localSnapshots, append([]repositorySnapshot(nil), statuses...))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,18 +58,18 @@ func TestRefreshPipelinesPublishProgressAndCompletion(t *testing.T) {
 		t.Fatalf("local snapshot sizes = %v", snapshotSizes(localSnapshots))
 	}
 
-	var remoteSnapshots [][]repoStatus
+	var remoteSnapshots [][]repositorySnapshot
 	refreshedInspect := func(_ context.Context, _, repository string) repoStatus {
 		return repoStatus{Path: filepath.Base(repository), Branch: "main", Ahead: 1, HasUpstream: true}
 	}
 	if err := refreshRemotes(context.Background(), coordinator, "/root", repositories,
 		func(context.Context, string) error { return nil }, refreshedInspect,
-		func(statuses []repoStatus) {
-			remoteSnapshots = append(remoteSnapshots, append([]repoStatus(nil), statuses...))
+		func(statuses []repositorySnapshot) {
+			remoteSnapshots = append(remoteSnapshots, append([]repositorySnapshot(nil), statuses...))
 		}); err != nil {
 		t.Fatal(err)
 	}
-	if len(remoteSnapshots) < 2 || countAhead(remoteSnapshots[0], 1) != 1 || countAhead(remoteSnapshots[len(remoteSnapshots)-1], 1) != 2 {
+	if len(remoteSnapshots) < 3 || countFetching(remoteSnapshots[0]) != 2 || countAhead(remoteSnapshots[len(remoteSnapshots)-1], 1) != 2 || countFetching(remoteSnapshots[len(remoteSnapshots)-1]) != 0 {
 		t.Fatalf("remote snapshots = %+v", remoteSnapshots)
 	}
 }
@@ -78,11 +78,11 @@ func TestTerminalDashboardRepaintsOnChangeAndResizeByIdentity(t *testing.T) {
 	var output bytes.Buffer
 	width := 80
 	dashboard := newTerminalDashboard(&output, func() int { return width })
-	dashboard.publish([]repoStatus{{Path: "z-selected", Branch: "main", HasUpstream: true}})
-	dashboard.publish([]repoStatus{
-		{Path: "a-error", Error: "broken"},
-		{Path: "z-selected", Branch: "main", Changed: 1, HasUpstream: true},
-	})
+	dashboard.publish(snapshotsOf(repoStatus{Path: "z-selected", Branch: "main", HasUpstream: true}))
+	dashboard.publish(snapshotsOf(
+		repoStatus{Path: "a-error", Error: "broken"},
+		repoStatus{Path: "z-selected", Branch: "main", Changed: 1, HasUpstream: true},
+	))
 	if dashboard.selected != "z-selected" || !strings.Contains(dashboard.last, "> z-selected") {
 		t.Fatalf("selection moved after reorder: selected=%q\n%s", dashboard.selected, dashboard.last)
 	}
@@ -109,7 +109,7 @@ func TestTerminalDashboardRepaintsOnChangeAndResizeByIdentity(t *testing.T) {
 	}
 }
 
-func snapshotSizes(snapshots [][]repoStatus) []int {
+func snapshotSizes(snapshots [][]repositorySnapshot) []int {
 	sizes := make([]int, len(snapshots))
 	for index := range snapshots {
 		sizes[index] = len(snapshots[index])
@@ -117,10 +117,20 @@ func snapshotSizes(snapshots [][]repoStatus) []int {
 	return sizes
 }
 
-func countAhead(statuses []repoStatus, ahead int) int {
+func countAhead(statuses []repositorySnapshot, ahead int) int {
 	count := 0
 	for _, status := range statuses {
 		if status.Ahead == ahead {
+			count++
+		}
+	}
+	return count
+}
+
+func countFetching(statuses []repositorySnapshot) int {
+	count := 0
+	for _, status := range statuses {
+		if status.Fetching {
 			count++
 		}
 	}

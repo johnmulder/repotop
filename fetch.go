@@ -25,11 +25,16 @@ func refreshRemotes(
 			continue
 		}
 		seen[repository] = struct{}{}
+		if !coordinator.canFetch(repository) {
+			continue
+		}
 		unique = append(unique, repository)
 	}
 	if len(unique) == 0 {
 		return ctx.Err()
 	}
+	coordinator.beginFetch(unique)
+	emitter.finished()
 
 	jobs := make(chan string)
 	updates := make(chan repositoryFetchUpdate)
@@ -92,7 +97,9 @@ func refreshRemotes(
 			emitter.updated()
 		}
 	}
+	coordinator.finishFetch(unique)
 	if err := ctx.Err(); err != nil {
+		emitter.finished()
 		return err
 	}
 	emitter.finished()

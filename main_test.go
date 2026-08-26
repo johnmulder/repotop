@@ -201,7 +201,7 @@ func TestRender(t *testing.T) {
 		{Path: "clean", Branch: "main", HasUpstream: true},
 	}
 	var output bytes.Buffer
-	if err := render(&output, statuses); err != nil {
+	if err := render(&output, snapshotsOf(statuses...)); err != nil {
 		t.Fatal(err)
 	}
 	want := "REPOSITORY                           BRANCH            WORKTREE      REMOTE\n" +
@@ -245,7 +245,7 @@ func TestRenderCompactAndNarrowGolden(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := renderSnapshot(statuses, test.width, ""); got != test.want {
+			if got := renderSnapshot(snapshotsOf(statuses...), test.width, ""); got != test.want {
 				t.Fatalf("render output:\n%q\nwant:\n%q", got, test.want)
 			}
 		})
@@ -261,7 +261,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 		t.Fatalf("middle truncation = %q", got)
 	}
 	for _, width := range []int{80, 50, 30, 10} {
-		output := renderSnapshot(statuses, width, "target")
+		output := renderSnapshot(snapshotsOf(statuses...), width, "target")
 		for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
 			if len([]rune(line)) > width {
 				t.Fatalf("width %d line has %d characters: %q", width, len([]rune(line)), line)
@@ -281,7 +281,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 
 func TestRenderSingularSummary(t *testing.T) {
 	var output bytes.Buffer
-	if err := render(&output, []repoStatus{{Path: ".", Error: "broken"}}); err != nil {
+	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"})); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "1 repo  0 clean  0 dirty  0 ahead  0 behind  1 error") {
@@ -380,8 +380,14 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 		t.Fatalf("inspect error: %s", status.Error)
 	}
 	if status.Path != "." || status.Branch != "main" || status.Changed != 1 || status.Staged != 1 || status.Modified != 1 ||
-		status.Conflicted != 0 || status.Untracked != 1 || status.HasUpstream {
+		status.Conflicted != 0 || status.Untracked != 1 || status.HasRemote || status.HasUpstream {
 		t.Fatalf("unexpected status: %+v", status)
+	}
+
+	runTestGit(t, repository, "remote", "add", "origin", "https://example.invalid/repo.git")
+	status = inspectRepository(context.Background(), repository, repository)
+	if status.Error != "" || !status.HasRemote || status.HasUpstream {
+		t.Fatalf("remote without upstream was not distinguished: %+v", status)
 	}
 }
 
@@ -426,4 +432,12 @@ func runTestGit(t *testing.T, directory, operation string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %s %s: %v\n%s", operation, strings.Join(args, " "), err, output)
 	}
+}
+
+func snapshotsOf(statuses ...repoStatus) []repositorySnapshot {
+	snapshots := make([]repositorySnapshot, len(statuses))
+	for index, status := range statuses {
+		snapshots[index] = repositorySnapshot{repoStatus: status}
+	}
+	return snapshots
 }

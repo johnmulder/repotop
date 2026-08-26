@@ -10,7 +10,7 @@ import (
 
 const snapshotInterval = 50 * time.Millisecond
 
-type snapshotPublisher func([]repoStatus)
+type snapshotPublisher func([]repositorySnapshot)
 
 type snapshotEmitter struct {
 	coordinator *repositoryCoordinator
@@ -46,10 +46,11 @@ type terminalDashboard struct {
 	mu       sync.Mutex
 	output   io.Writer
 	width    func() int
-	latest   []repoStatus
+	latest   []repositorySnapshot
 	selected string
 	last     string
 	err      error
+	now      func() time.Time
 }
 
 func terminalDashboardFor(output io.Writer) *terminalDashboard {
@@ -70,16 +71,16 @@ func terminalDashboardFor(output io.Writer) *terminalDashboard {
 }
 
 func newTerminalDashboard(output io.Writer, width func() int) *terminalDashboard {
-	return &terminalDashboard{output: output, width: width}
+	return &terminalDashboard{output: output, width: width, now: time.Now}
 }
 
-func (dashboard *terminalDashboard) publish(statuses []repoStatus) {
+func (dashboard *terminalDashboard) publish(statuses []repositorySnapshot) {
 	dashboard.mu.Lock()
 	defer dashboard.mu.Unlock()
 	dashboard.latest = slices.Clone(statuses)
 	if !containsPath(statuses, dashboard.selected) {
 		ordered := slices.Clone(statuses)
-		sortStatuses(ordered)
+		sortSnapshots(ordered)
 		if len(ordered) == 0 {
 			dashboard.selected = ""
 		} else {
@@ -115,9 +116,9 @@ func (dashboard *terminalDashboard) writeError() error {
 	return dashboard.err
 }
 
-func containsPath(statuses []repoStatus, path string) bool {
+func containsPath(statuses []repositorySnapshot, path string) bool {
 	if path == "" {
 		return false
 	}
-	return slices.ContainsFunc(statuses, func(status repoStatus) bool { return status.Path == path })
+	return slices.ContainsFunc(statuses, func(status repositorySnapshot) bool { return status.Path == path })
 }

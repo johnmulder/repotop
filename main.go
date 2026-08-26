@@ -28,6 +28,7 @@ type repoStatus struct {
 	Untracked   int
 	Ahead       int
 	Behind      int
+	HasRemote   bool
 	HasUpstream bool
 	Error       string
 }
@@ -111,17 +112,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if status.Error != "" {
 			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
 		}
-	}
-	for _, repository := range repositories {
-		fetch, ok := coordinator.fetchSnapshot(repository)
-		if !ok || fetch.Error == "" {
+		if status.Fetch.Error == "" {
 			continue
 		}
-		relative, err := filepath.Rel(absRoot, repository)
-		if err != nil {
-			relative = repository
-		}
-		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(filepath.ToSlash(relative)), fetch.Error)
+		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(status.Path), status.Fetch.Error)
 	}
 	if dashboard != nil {
 		dashboard.publish(statuses)
@@ -199,6 +193,12 @@ func inspectRepository(parent context.Context, root, repository string) repoStat
 		return status
 	}
 	parsed.Path = status.Path
+	remotes, err := runGit(ctx, repository, true, "remote")
+	if err != nil {
+		parsed.Error = err.Error()
+		return parsed
+	}
+	parsed.HasRemote = parsed.HasRemote || len(bytes.TrimSpace(remotes)) > 0
 	return parsed
 }
 
@@ -217,6 +217,7 @@ func parsePorcelain(output []byte) (repoStatus, error) {
 				status.Branch = "detached"
 			}
 		case strings.HasPrefix(record, "# branch.upstream "):
+			status.HasRemote = true
 			status.HasUpstream = true
 		case strings.HasPrefix(record, "# branch.ab "):
 			if _, err := fmt.Sscanf(strings.TrimPrefix(record, "# branch.ab "), "+%d -%d", &status.Ahead, &status.Behind); err != nil {
@@ -275,6 +276,16 @@ func sortStatuses(statuses []repoStatus) {
 	})
 }
 
+func sortSnapshots(snapshots []repositorySnapshot) {
+	sort.Slice(snapshots, func(i, j int) bool {
+		left, right := severity(snapshots[i].repoStatus), severity(snapshots[j].repoStatus)
+		if left != right {
+			return left < right
+		}
+		return snapshots[i].Path < snapshots[j].Path
+	})
+}
+
 func severity(status repoStatus) int {
 	switch {
 	case status.Error != "":
@@ -296,7 +307,7 @@ func severity(status repoStatus) int {
 	}
 }
 
-func render(output io.Writer, statuses []repoStatus) error {
+func render(output io.Writer, statuses []repositorySnapshot) error {
 	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, ""))
 	return err
 }

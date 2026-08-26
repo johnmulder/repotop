@@ -19,12 +19,12 @@ type renderRow struct {
 	Remote   string
 }
 
-func renderSnapshot(statuses []repoStatus, width int, selected string) string {
+func renderSnapshot(statuses []repositorySnapshot, width int, selected string) string {
 	if width <= 0 {
 		width = defaultRenderWidth
 	}
-	ordered := append([]repoStatus(nil), statuses...)
-	sortStatuses(ordered)
+	ordered := append([]repositorySnapshot(nil), statuses...)
+	sortSnapshots(ordered)
 	rows := make([]renderRow, 0, len(ordered))
 	clean, dirty, ahead, behind, failures := 0, 0, 0, 0, 0
 	for _, status := range ordered {
@@ -46,8 +46,8 @@ func renderSnapshot(statuses []repoStatus, width int, selected string) string {
 		rows = append(rows, renderRow{
 			Path:     safeCell(status.Path),
 			Branch:   safeCell(branch),
-			Worktree: worktreeText(status),
-			Remote:   remoteText(status),
+			Worktree: worktreeText(status.repoStatus),
+			Remote:   remoteText(status.repoStatus),
 		})
 	}
 
@@ -64,7 +64,7 @@ func renderSnapshot(statuses []repoStatus, width int, selected string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func renderTable(rows []renderRow, statuses []repoStatus, width, layoutWidth int, selected string) []string {
+func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutWidth int, selected string) []string {
 	var lines []string
 	switch {
 	case layoutWidth >= wideLayoutWidth:
