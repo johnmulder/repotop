@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 	"unicode"
 )
@@ -265,55 +264,25 @@ func severity(status repoStatus) int {
 	switch {
 	case status.Error != "":
 		return 0
-	case status.Behind > 0:
+	case status.Behind > 0 && status.Ahead == 0:
 		return 1
-	case status.dirty():
+	case status.Behind > 0 && status.Ahead > 0:
 		return 2
-	case status.Ahead > 0:
+	case status.Conflicted > 0:
 		return 3
-	case !status.HasUpstream:
+	case status.dirty():
 		return 4
-	default:
+	case status.Ahead > 0:
 		return 5
+	case !status.HasUpstream:
+		return 6
+	default:
+		return 7
 	}
 }
 
 func render(output io.Writer, statuses []repoStatus) error {
-	writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(writer, "REPOSITORY\tBRANCH\tWORKTREE\tREMOTE"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(writer, "----------\t------\t--------\t------"); err != nil {
-		return err
-	}
-
-	clean, dirty, ahead, behind, failures := 0, 0, 0, 0, 0
-	for _, status := range statuses {
-		branch := status.Branch
-		if status.Error != "" {
-			failures++
-			branch = "-"
-		} else if !status.dirty() {
-			clean++
-		} else {
-			dirty++
-		}
-		if status.Ahead > 0 {
-			ahead++
-		}
-		if status.Behind > 0 {
-			behind++
-		}
-		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n",
-			safeCell(status.Path), safeCell(branch), worktreeText(status), remoteText(status)); err != nil {
-			return err
-		}
-	}
-	if err := writer.Flush(); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(output, "\n%d %s  %d clean  %d dirty  %d ahead  %d behind  %d %s\n",
-		len(statuses), plural(len(statuses), "repo"), clean, dirty, ahead, behind, failures, plural(failures, "error"))
+	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, ""))
 	return err
 }
 

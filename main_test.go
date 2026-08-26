@@ -177,6 +177,7 @@ func TestSortStatuses(t *testing.T) {
 		{Path: "clean", HasUpstream: true},
 		{Path: "missing"},
 		{Path: "ahead", Ahead: 1, HasUpstream: true},
+		{Path: "diverged", Ahead: 1, Behind: 1, HasUpstream: true},
 		{Path: "dirty-b", Changed: 1, HasUpstream: true},
 		{Path: "dirty-a", Untracked: 1, HasUpstream: true},
 		{Path: "conflict", Conflicted: 1, HasUpstream: true},
@@ -188,7 +189,7 @@ func TestSortStatuses(t *testing.T) {
 	for _, status := range statuses {
 		got = append(got, status.Path)
 	}
-	want := []string{"error", "behind", "conflict", "dirty-a", "dirty-b", "ahead", "missing", "clean"}
+	want := []string{"error", "behind", "diverged", "conflict", "dirty-a", "dirty-b", "ahead", "missing", "clean"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("sort = %v, want %v", got, want)
 	}
@@ -203,13 +204,78 @@ func TestRender(t *testing.T) {
 	if err := render(&output, statuses); err != nil {
 		t.Fatal(err)
 	}
-	want := "REPOSITORY  BRANCH  WORKTREE  REMOTE\n" +
-		"----------  ------  --------  ------\n" +
-		"dirty       topic   C1 M1 ?2  +2 -1\n" +
-		"clean       main    clean     ok\n" +
+	want := "REPOSITORY                           BRANCH            WORKTREE      REMOTE\n" +
+		"-----------------------------------  ----------------  ------------  -----------\n" +
+		"dirty                                topic             C1 M1 ?2      +2 -1\n" +
+		"clean                                main              clean         ok\n" +
 		"\n2 repos  1 clean  1 dirty  1 ahead  1 behind  0 errors\n"
 	if output.String() != want {
 		t.Fatalf("render output:\n%q\nwant:\n%q", output.String(), want)
+	}
+}
+
+func TestRenderCompactAndNarrowGolden(t *testing.T) {
+	statuses := []repoStatus{
+		{Path: "dirty", Branch: "topic", Changed: 1, Conflicted: 1, Untracked: 2, Ahead: 2, Behind: 1, HasUpstream: true},
+		{Path: "clean", Branch: "main", HasUpstream: true},
+	}
+	tests := []struct {
+		name  string
+		width int
+		want  string
+	}{
+		{
+			name:  "compact",
+			width: 50,
+			want: "REPOSITORY               WORKTREE      REMOTE\n" +
+				"-----------------------  ------------  -----------\n" +
+				"dirty                    C1 M1 ?2      +2 -1\n" +
+				"clean                    clean         ok\n" +
+				"\n2 repos  1 clean  1 dirty  0 errors\n",
+		},
+		{
+			name:  "narrow",
+			width: 30,
+			want: "REPOS...  STATE\n" +
+				"--------  --------------------\n" +
+				"dirty     C1 M1 ?2 +2 -1\n" +
+				"clean     clean ok\n" +
+				"\n2 repos  1 dirty  0 errors\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := renderSnapshot(statuses, test.width, ""); got != test.want {
+				t.Fatalf("render output:\n%q\nwant:\n%q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
+	statuses := []repoStatus{
+		{Path: "alpha/beta/repository-name", Branch: "feature/an-extremely-long-branch", HasUpstream: true},
+		{Path: "target", Branch: "main", Changed: 1, HasUpstream: true},
+	}
+	if got := middleTruncate(statuses[0].Path, 14); got != "alp...ory-name" {
+		t.Fatalf("middle truncation = %q", got)
+	}
+	for _, width := range []int{80, 50, 30, 10} {
+		output := renderSnapshot(statuses, width, "target")
+		for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+			if len([]rune(line)) > width {
+				t.Fatalf("width %d line has %d characters: %q", width, len([]rune(line)), line)
+			}
+		}
+		if !strings.Contains(output, "> ") {
+			t.Fatalf("width %d lost selection marker:\n%s", width, output)
+		}
+		if width >= 30 && !strings.Contains(output, "> target") {
+			t.Fatalf("width %d lost selected identity:\n%s", width, output)
+		}
+	}
+	if statuses[0].Path != "alpha/beta/repository-name" {
+		t.Fatalf("renderer mutated input order: %+v", statuses)
 	}
 }
 
