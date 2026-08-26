@@ -8,28 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Test behavior with disposable real Git repositories
-
-**Priority:** P1
-
-### Gap
-
-Parser unit tests alone cannot prove that the program agrees with Git across staged changes, detached heads, worktrees, upstream configuration, divergence, or fetch updates. Hand-maintained repository fixtures are brittle and difficult to review.
-
-### Approach
-
-Build integration tests that create temporary repositories and local bare remotes with the installed `git` executable. Use real commits and refs to exercise end-to-end inspection while keeping network access out of the test suite.
-
-### Implementation considerations
-
-- Set test-local author identity and deterministic branch names rather than relying on global Git configuration.
-- Cover clean, staged, modified, untracked, conflicted, ahead, behind, diverged, detached, no upstream, no remote, worktree, and broken-repository states.
-- Use local bare remotes to verify fetch and prune behavior without credentials or external services.
-- Keep scheduler tests deterministic with an injectable clock or explicit trigger channel; avoid timing assertions based on sleeps.
-- Test cancellation and late-result rejection as well as happy paths.
-- Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
-
-## 2. Add one-shot output by reusing the same snapshot model
+## 1. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -49,7 +28,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 3. Add scan exclusions only when traversal data justifies them
+## 2. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -71,4 +50,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Proposal 1 should land before broad distribution because it protects Git correctness. Proposal 2 is the smallest useful extension once the interactive core is stable. Proposal 3 should remain deferred until measured traversal problems appear.
+Proposal 1 is the smallest useful extension once the interactive core is stable. Proposal 2 should remain deferred until measured traversal problems appear.
