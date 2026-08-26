@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -55,7 +56,7 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 
 	prefixWidth := 0
 	if selected != "" {
-		prefixWidth = utf8.RuneCountInString(palette.selection)
+		prefixWidth = displayWidth(palette.selection)
 	}
 	contentWidth := max(1, width-prefixWidth)
 	lines := renderTable(rows, ordered, contentWidth, width, selected, palette)
@@ -114,7 +115,7 @@ func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutW
 		}
 	}
 	if selected != "" {
-		indent := strings.Repeat(" ", utf8.RuneCountInString(palette.selection))
+		indent := strings.Repeat(" ", displayWidth(palette.selection))
 		lines[0] = indent + lines[0]
 		lines[1] = indent + lines[1]
 	}
@@ -253,47 +254,125 @@ func formatTime(value time.Time) string {
 
 func wrappedLine(value string, width int) []string {
 	width = max(1, width)
-	characters := []rune(value)
-	if len(characters) == 0 {
+	if value == "" {
 		return []string{""}
 	}
-	lines := make([]string, 0, (len(characters)+width-1)/width)
-	for len(characters) > width {
-		lines = append(lines, string(characters[:width]))
-		characters = characters[width:]
+	var lines []string
+	for value != "" {
+		part := takePrefixCells(value, width)
+		consumed := len(part)
+		if consumed == 0 {
+			_, consumed = utf8.DecodeRuneInString(value)
+			part = "?"
+		}
+		lines = append(lines, part)
+		value = value[consumed:]
 	}
-	return append(lines, string(characters))
+	return lines
 }
 
 func middleTruncate(value string, width int) string {
-	characters := []rune(value)
-	if len(characters) <= width {
+	if displayWidth(value) <= width {
 		return value
 	}
 	if width <= 3 {
-		return string(characters[len(characters)-width:])
+		return takeSuffixCells(value, width)
 	}
 	available := width - 3
 	left := available / 3
 	right := available - left
-	return string(characters[:left]) + "..." + string(characters[len(characters)-right:])
+	return takePrefixCells(value, left) + "..." + takeSuffixCells(value, right)
 }
 
 func truncateEnd(value string, width int) string {
-	characters := []rune(value)
-	if len(characters) <= width {
+	if displayWidth(value) <= width {
 		return value
 	}
 	if width <= 3 {
-		return string(characters[:width])
+		return takePrefixCells(value, width)
 	}
-	return string(characters[:width-3]) + "..."
+	return takePrefixCells(value, width-3) + "..."
 }
 
 func padRight(value string, width int) string {
-	return value + strings.Repeat(" ", max(0, width-utf8.RuneCountInString(value)))
+	return value + strings.Repeat(" ", max(0, width-displayWidth(value)))
 }
 
 func fitLine(value string, width int) string {
 	return truncateEnd(strings.TrimRight(value, " "), width)
+}
+
+func displayWidth(value string) int {
+	width := 0
+	for _, character := range value {
+		width += runeWidth(character)
+	}
+	return width
+}
+
+func runeWidth(character rune) int {
+	switch {
+	case unicode.IsControl(character),
+		unicode.Is(unicode.Mn, character),
+		unicode.Is(unicode.Me, character),
+		unicode.Is(unicode.Cf, character):
+		return 0
+	case isWideRune(character):
+		return 2
+	default:
+		return 1
+	}
+}
+
+// ponytail: this compact wcwidth approximation covers common repository names;
+// use a maintained grapheme-width package if real terminals expose edge cases.
+func isWideRune(character rune) bool {
+	return character >= 0x1100 && (character <= 0x115f ||
+		character == 0x2329 || character == 0x232a ||
+		character >= 0x2e80 && character <= 0xa4cf && character != 0x303f ||
+		character >= 0xac00 && character <= 0xd7a3 ||
+		character >= 0xf900 && character <= 0xfaff ||
+		character >= 0xfe10 && character <= 0xfe19 ||
+		character >= 0xfe30 && character <= 0xfe6f ||
+		character >= 0xff00 && character <= 0xff60 ||
+		character >= 0xffe0 && character <= 0xffe6 ||
+		character >= 0x1f300 && character <= 0x1faff ||
+		character >= 0x20000 && character <= 0x3fffd)
+}
+
+func takePrefixCells(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	cells, end := 0, 0
+	for index, character := range value {
+		characterWidth := runeWidth(character)
+		if cells+characterWidth > width {
+			break
+		}
+		cells += characterWidth
+		_, size := utf8.DecodeRuneInString(value[index:])
+		end = index + size
+	}
+	return value[:end]
+}
+
+func takeSuffixCells(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	characters := []rune(value)
+	cells, start := 0, len(characters)
+	for index := len(characters) - 1; index >= 0; index-- {
+		characterWidth := runeWidth(characters[index])
+		if cells+characterWidth > width {
+			break
+		}
+		cells += characterWidth
+		start = index
+	}
+	for start < len(characters) && runeWidth(characters[start]) == 0 {
+		start++
+	}
+	return string(characters[start:])
 }

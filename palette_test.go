@@ -57,6 +57,52 @@ func TestUnicodePaletteUsesReviewedGlyphsWithoutLosingText(t *testing.T) {
 			t.Fatalf("Unicode rendering missing %q:\n%s", want, output)
 		}
 	}
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if displayWidth(line) > 80 {
+			t.Fatalf("Unicode line uses %d cells: %q", displayWidth(line), line)
+		}
+	}
+}
+
+func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
+	tests := []struct {
+		value string
+		want  int
+	}{
+		{value: "ascii", want: 5},
+		{value: "e\u0301", want: 1},
+		{value: "\u4ed3\u5e93", want: 4},
+		{value: "\U0001f680", want: 2},
+	}
+	for _, test := range tests {
+		if got := displayWidth(test.value); got != test.want {
+			t.Fatalf("displayWidth(%q) = %d, want %d", test.value, got, test.want)
+		}
+	}
+
+	if got := truncateEnd("ab\u4ed3\u5e93cd", 7); got != "ab\u4ed3..." || displayWidth(got) != 7 {
+		t.Fatalf("end truncation = %q (%d cells)", got, displayWidth(got))
+	}
+	if got := middleTruncate("ab\u4ed3\u5e93cd", 7); got != "a...cd" || displayWidth(got) > 7 {
+		t.Fatalf("middle truncation = %q (%d cells)", got, displayWidth(got))
+	}
+	if got := padRight("\u4ed3", 4); displayWidth(got) != 4 {
+		t.Fatalf("padding = %q (%d cells)", got, displayWidth(got))
+	}
+
+	value := "a\u4ed3e\u0301b"
+	lines := wrappedLine(value, 3)
+	if strings.Join(lines, "") != value {
+		t.Fatalf("wrapping changed content: %q", lines)
+	}
+	for _, line := range lines {
+		if displayWidth(line) > 3 {
+			t.Fatalf("wrapped line uses %d cells: %q", displayWidth(line), line)
+		}
+	}
+	if got := takeSuffixCells("ae\u0301", 1); got != "e\u0301" {
+		t.Fatalf("suffix split combining sequence: %q", got)
+	}
 }
 
 func TestRunASCIIOverrideAndNoColor(t *testing.T) {

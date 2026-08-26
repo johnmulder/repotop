@@ -264,8 +264,8 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 	for _, width := range []int{80, 50, 30, 10} {
 		output := renderSnapshot(snapshotsOf(statuses...), width, "target", time.Unix(100, 0), defaultFetchInterval, asciiPalette)
 		for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
-			if len([]rune(line)) > width {
-				t.Fatalf("width %d line has %d characters: %q", width, len([]rune(line)), line)
+			if displayWidth(line) > width {
+				t.Fatalf("width %d line uses %d cells: %q", width, displayWidth(line), line)
 			}
 		}
 		if !strings.Contains(output, "> ") {
@@ -350,7 +350,7 @@ func TestSelectedDetailsShowSanitizedErrorsAndTimestamps(t *testing.T) {
 		t.Fatalf("selected detail contains a control character: %q", output)
 	}
 	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
-		if len([]rune(line)) > 80 {
+		if displayWidth(line) > 80 {
 			t.Fatalf("detail line exceeded width: %q", line)
 		}
 	}
