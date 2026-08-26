@@ -10,11 +10,13 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
 	gitOutputLimit     = 1 << 20
 	gitDiagnosticLimit = 512
+	remoteFetchTimeout = 30 * time.Second
 )
 
 type gitFailureKind string
@@ -71,6 +73,9 @@ func runGit(ctx context.Context, repository string, readOnly bool, operation str
 	commandArgs := append([]string{"-C", repository, operation}, args...)
 	command := exec.CommandContext(ctx, "git", commandArgs...)
 	command.Env = append(os.Environ(), "LC_ALL=C")
+	if operation == "fetch" {
+		command.Env = append(command.Env, "GIT_TERMINAL_PROMPT=0")
+	}
 	if readOnly {
 		command.Env = append(command.Env, "GIT_OPTIONAL_LOCKS=0")
 	}
@@ -101,6 +106,13 @@ func runGit(ctx context.Context, repository string, readOnly bool, operation str
 		}
 	}
 	return bytes.Clone(stdout.buffer.Bytes()), nil
+}
+
+func fetchRepository(parent context.Context, repository string) error {
+	ctx, cancel := context.WithTimeout(parent, remoteFetchTimeout)
+	defer cancel()
+	_, err := runGit(ctx, repository, false, "fetch", "--prune")
+	return err
 }
 
 func classifyGitFailure(runErr error, detail string) gitFailureKind {

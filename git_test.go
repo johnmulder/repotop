@@ -92,6 +92,29 @@ func TestRunGitReadOnlyEnvironment(t *testing.T) {
 	}
 }
 
+func TestFetchRepositoryIsNoninteractiveAndPrunes(t *testing.T) {
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MODE", "fetch")
+	marker := filepath.Join(t.TempDir(), "fetch")
+	t.Setenv("FAKE_GIT_MARKER", marker)
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+
+	if err := fetchRepository(context.Background(), t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(output); got != "0|fetch|--prune" {
+		t.Fatalf("fetch invocation = %q", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	requireGitFailure(t, fetchRepository(ctx, t.TempDir()), gitFailureCanceled)
+}
+
 func installFakeGit(t *testing.T) {
 	t.Helper()
 	directory := t.TempDir()
@@ -103,6 +126,7 @@ case "$FAKE_GIT_MODE" in
   ordinary) echo "fatal: ordinary failure" >&2; exit 1 ;;
   output) exec /bin/dd if=/dev/zero bs=1048577 count=1 2>/dev/null ;;
   environment) printf "%s" "$GIT_OPTIONAL_LOCKS" ;;
+  fetch) printf "%s|%s|%s" "$GIT_TERMINAL_PROMPT" "$3" "$4" > "$FAKE_GIT_MARKER" ;;
 esac
 `
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
