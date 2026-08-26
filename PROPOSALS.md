@@ -8,28 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Make failure and freshness states unambiguous
-
-**Priority:** P0
-
-### Gap
-
-Labels such as `fetch failed`, `no upstream`, and `fetched 34s ago` can conceal materially different situations. A single header timestamp is especially misleading when repositories were fetched at different times or some failed while others succeeded.
-
-### Approach
-
-Model local inspection, remote relationship, fetch activity, and data freshness as separate states. Keep the table concise, but show the selected repository's full error and timestamps in a footer or status line. Derive any aggregate header text from repository-level data.
-
-### Implementation considerations
-
-- Distinguish no remote, no upstream, fetching, current, stale, failed-with-prior-data, and failed-without-data.
-- Never replace known ahead/behind counts with zero after a fetch failure.
-- Label counts in the summary as repository counts, not commit totals.
-- Define stale relative to the configured fetch interval rather than a hard-coded age.
-- Sanitize control characters in Git diagnostics before displaying them in a terminal.
-- Keep detailed failures available without turning the main table into a log viewer.
-
-## 2. Make every non-ASCII glyph deliberate and detectable
+## 1. Make every non-ASCII glyph deliberate and detectable
 
 **Priority:** P1
 
@@ -61,7 +40,7 @@ Unicode       ASCII
 - Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
 - Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
 
-## 3. Test behavior with disposable real Git repositories
+## 2. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -82,7 +61,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 4. Add one-shot output by reusing the same snapshot model
+## 3. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -102,7 +81,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 5. Add scan exclusions only when traversal data justifies them
+## 4. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -124,4 +103,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Implement proposal 1 to complete the responsive version 0.1 dashboard. Proposals 2 and 3 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 4 is the smallest useful extension once the interactive core is stable. Proposal 5 should remain deferred until measured traversal problems appear.
+Proposals 1 and 2 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 3 is the smallest useful extension once the interactive core is stable. Proposal 4 should remain deferred until measured traversal problems appear.
