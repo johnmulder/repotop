@@ -113,6 +113,11 @@ func TestFetchRepositoryIsNoninteractiveAndPrunes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	requireGitFailure(t, fetchRepository(ctx, t.TempDir()), gitFailureCanceled)
+
+	t.Setenv("FAKE_GIT_MODE", "timeout")
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	requireGitFailure(t, fetchRepository(ctx, t.TempDir()), gitFailureTimeout)
 }
 
 func installFakeGit(t *testing.T) {
@@ -127,6 +132,14 @@ case "$FAKE_GIT_MODE" in
   output) exec /bin/dd if=/dev/zero bs=1048577 count=1 2>/dev/null ;;
   environment) printf "%s" "$GIT_OPTIONAL_LOCKS" ;;
   fetch) printf "%s|%s|%s" "$GIT_TERMINAL_PROMPT" "$3" "$4" > "$FAKE_GIT_MARKER" ;;
+  timeout) exec /bin/sleep 5 ;;
+  run)
+    if [ "$3" = fetch ]; then
+      : > "$FAKE_GIT_MARKER"
+    else
+      printf '# branch.head main\0# branch.upstream origin/main\0# branch.ab +0 -0\0'
+    fi
+    ;;
 esac
 `
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {

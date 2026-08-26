@@ -325,6 +325,8 @@ The core repository inspection logic should not depend on the TUI. This makes it
 
 The scheduler's coordinator is the sole owner of the repository map. Inspection workers emit repository identity, scan generation, and normalized status through a channel; they never mutate shared state. The coordinator ignores obsolete generations, removes missing repositories only after a matching scan completes, and publishes copied snapshots so consumers cannot mutate its state.
 
+Remote refresh uses a fixed four-worker batch after local inspection. Repository roots are deduplicated before queueing, fetch failures are stored independently from local status, and successful fetches trigger local reinspection for current ahead/behind counts. Fetch commands are limited to `git fetch --prune`, disable terminal prompts, and inherit cancellation plus an internal deadline. `--no-fetch` skips the batch completely.
+
 ## Dependencies
 
 Minimize external dependencies.

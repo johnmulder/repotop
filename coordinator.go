@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 const localStatusWorkers = 8
@@ -13,15 +14,35 @@ type repositoryUpdate struct {
 	Status     repoStatus
 }
 
+type fetchStatus struct {
+	LastAttempt time.Time
+	LastSuccess time.Time
+	Duration    time.Duration
+	Error       string
+}
+
+type repositoryFetchUpdate struct {
+	Repository string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Status     *repoStatus
+	Error      string
+}
+
+type repositoryRecord struct {
+	Status repoStatus
+	Fetch  fetchStatus
+}
+
 // repositoryCoordinator is owned by one goroutine; workers communicate only
-// through repositoryUpdate values.
+// through typed update values.
 type repositoryCoordinator struct {
 	generation   uint64
-	repositories map[string]repoStatus
+	repositories map[string]repositoryRecord
 }
 
 func newRepositoryCoordinator() *repositoryCoordinator {
-	return &repositoryCoordinator{repositories: make(map[string]repoStatus)}
+	return &repositoryCoordinator{repositories: make(map[string]repositoryRecord)}
 }
 
 func (coordinator *repositoryCoordinator) beginScan() uint64 {
@@ -33,8 +54,33 @@ func (coordinator *repositoryCoordinator) apply(update repositoryUpdate) bool {
 	if update.Generation != coordinator.generation {
 		return false
 	}
-	coordinator.repositories[update.Repository] = update.Status
+	record := coordinator.repositories[update.Repository]
+	record.Status = update.Status
+	coordinator.repositories[update.Repository] = record
 	return true
+}
+
+func (coordinator *repositoryCoordinator) applyFetch(update repositoryFetchUpdate) bool {
+	record, ok := coordinator.repositories[update.Repository]
+	if !ok {
+		return false
+	}
+	record.Fetch.LastAttempt = update.StartedAt
+	record.Fetch.Duration = update.FinishedAt.Sub(update.StartedAt)
+	record.Fetch.Error = update.Error
+	if update.Error == "" {
+		record.Fetch.LastSuccess = update.FinishedAt
+		if update.Status != nil {
+			record.Status = *update.Status
+		}
+	}
+	coordinator.repositories[update.Repository] = record
+	return true
+}
+
+func (coordinator *repositoryCoordinator) fetchSnapshot(repository string) (fetchStatus, bool) {
+	record, ok := coordinator.repositories[repository]
+	return record.Fetch, ok
 }
 
 func (coordinator *repositoryCoordinator) completeScan(generation uint64, repositories []string) bool {
@@ -55,8 +101,8 @@ func (coordinator *repositoryCoordinator) completeScan(generation uint64, reposi
 
 func (coordinator *repositoryCoordinator) snapshot() []repoStatus {
 	statuses := make([]repoStatus, 0, len(coordinator.repositories))
-	for _, status := range coordinator.repositories {
-		statuses = append(statuses, status)
+	for _, record := range coordinator.repositories {
+		statuses = append(statuses, record.Status)
 	}
 	sortStatuses(statuses)
 	return statuses

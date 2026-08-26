@@ -40,7 +40,8 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("repotop", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [directory]") }
+	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--no-fetch] [directory]") }
+	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -91,11 +92,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "repotop: inspect: %v\n", err)
 		return 1
 	}
+	if !*noFetch {
+		if err := refreshRemotes(context.Background(), coordinator, absRoot, repositories, fetchRepository, inspectRepository); err != nil {
+			fmt.Fprintf(stderr, "repotop: fetch: %v\n", err)
+			return 1
+		}
+	}
 	statuses := coordinator.snapshot()
 	for _, status := range statuses {
 		if status.Error != "" {
 			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
 		}
+	}
+	for _, repository := range repositories {
+		fetch, ok := coordinator.fetchSnapshot(repository)
+		if !ok || fetch.Error == "" {
+			continue
+		}
+		relative, err := filepath.Rel(absRoot, repository)
+		if err != nil {
+			relative = repository
+		}
+		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(filepath.ToSlash(relative)), fetch.Error)
 	}
 	if err := render(stdout, statuses); err != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", err)

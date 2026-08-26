@@ -251,13 +251,39 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("help exit = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "usage: repotop [directory]") {
+	if !strings.Contains(stderr.String(), "usage: repotop [--no-fetch] [directory]") {
 		t.Fatalf("unexpected help: %q", stderr.String())
 	}
 
 	stderr.Reset()
 	if code := run([]string{"one", "two"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("extra argument exit = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+func TestRunNoFetch(t *testing.T) {
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MODE", "run")
+	marker := filepath.Join(t.TempDir(), "fetch")
+	t.Setenv("FAKE_GIT_MARKER", marker)
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, ".git"))
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--no-fetch", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("no-fetch exit = %d, stderr = %q", code, stderr.String())
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fetch marker with --no-fetch: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("default fetch exit = %d, stderr = %q", code, stderr.String())
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("default fetch marker: %v", err)
 	}
 }
 

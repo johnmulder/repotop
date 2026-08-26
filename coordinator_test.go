@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,6 +51,149 @@ func TestCoordinatorSnapshotIsDetached(t *testing.T) {
 	snapshot[0].Branch = "mutated"
 	if got := coordinator.snapshot()[0].Branch; got != "main" {
 		t.Fatalf("coordinator state mutated through snapshot: %q", got)
+	}
+}
+
+func TestCoordinatorKeepsFetchMetadataSeparate(t *testing.T) {
+	coordinator := newRepositoryCoordinator()
+	generation := coordinator.beginScan()
+	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo", Branch: "main", Ahead: 2}})
+	coordinator.completeScan(generation, []string{"/repo"})
+
+	firstAttempt := time.Unix(10, 0)
+	firstSuccess := time.Unix(12, 0)
+	refreshed := repoStatus{Path: "repo", Branch: "main", Ahead: 1}
+	if !coordinator.applyFetch(repositoryFetchUpdate{
+		Repository: "/repo", StartedAt: firstAttempt, FinishedAt: firstSuccess, Status: &refreshed,
+	}) {
+		t.Fatal("successful fetch update was rejected")
+	}
+	failureAttempt := time.Unix(20, 0)
+	if !coordinator.applyFetch(repositoryFetchUpdate{
+		Repository: "/repo", StartedAt: failureAttempt, FinishedAt: time.Unix(23, 0), Error: "offline",
+	}) {
+		t.Fatal("failed fetch update was rejected")
+	}
+
+	fetch, ok := coordinator.fetchSnapshot("/repo")
+	if !ok || !fetch.LastAttempt.Equal(failureAttempt) || !fetch.LastSuccess.Equal(firstSuccess) || fetch.Duration != 3*time.Second || fetch.Error != "offline" {
+		t.Fatalf("unexpected fetch metadata: %+v", fetch)
+	}
+	status := coordinator.snapshot()[0]
+	if status.Ahead != 1 || status.Error != "" {
+		t.Fatalf("failed fetch changed local status: %+v", status)
+	}
+}
+
+func TestRefreshRemotesBoundsDeduplicatesAndIsolatesFailures(t *testing.T) {
+	coordinator := newRepositoryCoordinator()
+	repositories := make([]string, 12)
+	generation := coordinator.beginScan()
+	for index := range repositories {
+		repository := filepath.Join("/root", fmt.Sprintf("repo-%02d", index))
+		repositories[index] = repository
+		coordinator.apply(repositoryUpdate{
+			Generation: generation,
+			Repository: repository,
+			Status:     repoStatus{Path: filepath.Base(repository), Branch: "main", Ahead: 2, HasUpstream: true},
+		})
+	}
+	coordinator.completeScan(generation, repositories)
+	requests := append(append([]string{}, repositories...), repositories...)
+
+	release := make(chan struct{})
+	started := make(chan struct{}, len(repositories))
+	var active atomic.Int64
+	var maximum atomic.Int64
+	counts := make(map[string]int)
+	var countsMu sync.Mutex
+	fetch := func(ctx context.Context, repository string) error {
+		countsMu.Lock()
+		counts[repository]++
+		countsMu.Unlock()
+		current := active.Add(1)
+		for {
+			previous := maximum.Load()
+			if current <= previous || maximum.CompareAndSwap(previous, current) {
+				break
+			}
+		}
+		started <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+			active.Add(-1)
+			return ctx.Err()
+		}
+		active.Add(-1)
+		if repository == repositories[0] {
+			return errors.New("remote unavailable")
+		}
+		return nil
+	}
+	inspect := func(_ context.Context, _, repository string) repoStatus {
+		return repoStatus{Path: filepath.Base(repository), Branch: "main", Ahead: 1, HasUpstream: true}
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- refreshRemotes(context.Background(), coordinator, "/root", requests, fetch, inspect)
+	}()
+	for range remoteFetchWorkers {
+		<-started
+	}
+	select {
+	case <-started:
+		t.Fatal("more fetches started than the worker bound")
+	default:
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	if got := maximum.Load(); got != remoteFetchWorkers {
+		t.Fatalf("maximum concurrent fetches = %d", got)
+	}
+	countsMu.Lock()
+	defer countsMu.Unlock()
+	for _, repository := range repositories {
+		if counts[repository] != 1 {
+			t.Fatalf("fetch count for %s = %d", repository, counts[repository])
+		}
+	}
+	failed, _ := coordinator.fetchSnapshot(repositories[0])
+	if failed.Error == "" || coordinator.repositories[repositories[0]].Status.Ahead != 2 {
+		t.Fatalf("failed fetch state = %+v, record = %+v", failed, coordinator.repositories[repositories[0]])
+	}
+	for _, repository := range repositories[1:] {
+		fetchState, _ := coordinator.fetchSnapshot(repository)
+		if fetchState.Error != "" || fetchState.LastSuccess.IsZero() || coordinator.repositories[repository].Status.Ahead != 1 {
+			t.Fatalf("successful fetch state for %s = %+v, record = %+v", repository, fetchState, coordinator.repositories[repository])
+		}
+	}
+}
+
+func TestRefreshRemotesCancellation(t *testing.T) {
+	coordinator := newRepositoryCoordinator()
+	generation := coordinator.beginScan()
+	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo"}})
+	coordinator.completeScan(generation, []string{"/repo"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	fetch := func(ctx context.Context, _ string) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- refreshRemotes(ctx, coordinator, "/", []string{"/repo"}, fetch, inspectRepository)
+	}()
+	<-started
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("refresh error = %v", err)
 	}
 }
 
