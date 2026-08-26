@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDiscover(t *testing.T) {
@@ -204,11 +205,11 @@ func TestRender(t *testing.T) {
 	if err := render(&output, snapshotsOf(statuses...)); err != nil {
 		t.Fatal(err)
 	}
-	want := "REPOSITORY                           BRANCH            WORKTREE      REMOTE\n" +
-		"-----------------------------------  ----------------  ------------  -----------\n" +
-		"dirty                                topic             C1 M1 ?2      +2 -1\n" +
-		"clean                                main              clean         ok\n" +
-		"\n2 repos  1 clean  1 dirty  1 ahead  1 behind  0 errors\n"
+	want := "REPOSITORY                        BRANCH            WORKTREE      REMOTE\n" +
+		"--------------------------------  ----------------  ------------  --------------\n" +
+		"dirty                             topic             C1 M1 ?2      +2 -1 cached\n" +
+		"clean                             main              clean         cached\n" +
+		"\n2 repos (1 clean, 1 dirty, 1 ahead, 1 behind, 0 errors)\n"
 	if output.String() != want {
 		t.Fatalf("render output:\n%q\nwant:\n%q", output.String(), want)
 	}
@@ -227,25 +228,25 @@ func TestRenderCompactAndNarrowGolden(t *testing.T) {
 		{
 			name:  "compact",
 			width: 50,
-			want: "REPOSITORY               WORKTREE      REMOTE\n" +
-				"-----------------------  ------------  -----------\n" +
-				"dirty                    C1 M1 ?2      +2 -1\n" +
-				"clean                    clean         ok\n" +
-				"\n2 repos  1 clean  1 dirty  0 errors\n",
+			want: "REPOSITORY            WORKTREE      REMOTE\n" +
+				"--------------------  ------------  --------------\n" +
+				"dirty                 C1 M1 ?2      +2 -1 cached\n" +
+				"clean                 clean         cached\n" +
+				"\n2 repos (1 clean, 1 dirty, 0 errors)\n",
 		},
 		{
 			name:  "narrow",
 			width: 30,
 			want: "REPOS...  STATE\n" +
 				"--------  --------------------\n" +
-				"dirty     C1 M1 ?2 +2 -1\n" +
-				"clean     clean ok\n" +
-				"\n2 repos  1 dirty  0 errors\n",
+				"dirty     C1 M1 ?2 +2 -1 ca...\n" +
+				"clean     clean cached\n" +
+				"\n2 repos (1 dirty, 0 errors)\n",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := renderSnapshot(snapshotsOf(statuses...), test.width, ""); got != test.want {
+			if got := renderSnapshot(snapshotsOf(statuses...), test.width, "", time.Unix(100, 0), defaultFetchInterval); got != test.want {
 				t.Fatalf("render output:\n%q\nwant:\n%q", got, test.want)
 			}
 		})
@@ -261,7 +262,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 		t.Fatalf("middle truncation = %q", got)
 	}
 	for _, width := range []int{80, 50, 30, 10} {
-		output := renderSnapshot(snapshotsOf(statuses...), width, "target")
+		output := renderSnapshot(snapshotsOf(statuses...), width, "target", time.Unix(100, 0), defaultFetchInterval)
 		for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
 			if len([]rune(line)) > width {
 				t.Fatalf("width %d line has %d characters: %q", width, len([]rune(line)), line)
@@ -284,8 +285,74 @@ func TestRenderSingularSummary(t *testing.T) {
 	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"})); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "1 repo  0 clean  0 dirty  0 ahead  0 behind  1 error") {
+	if !strings.Contains(output.String(), "1 repo (0 clean, 0 dirty, 0 ahead, 0 behind, 1 error)") {
 		t.Fatalf("unexpected singular summary: %q", output.String())
+	}
+}
+
+func TestFreshnessStatesPreserveKnownDistance(t *testing.T) {
+	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
+	interval := 3 * time.Minute
+	comparable := repoStatus{Path: "repo", HasRemote: true, HasUpstream: true, Ahead: 2, Behind: 1}
+	tests := []struct {
+		name     string
+		snapshot repositorySnapshot
+		want     string
+	}{
+		{name: "local error", snapshot: repositorySnapshot{repoStatus: repoStatus{Error: "broken"}}, want: "error"},
+		{name: "no remote", snapshot: repositorySnapshot{repoStatus: repoStatus{}}, want: "no remote"},
+		{name: "no upstream", snapshot: repositorySnapshot{repoStatus: repoStatus{HasRemote: true}}, want: "no upstream"},
+		{name: "fetching", snapshot: repositorySnapshot{repoStatus: comparable, Fetching: true}, want: "+2 -1 fetching"},
+		{name: "current at boundary", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{LastSuccess: now.Add(-interval)}}, want: "+2 -1 current"},
+		{name: "stale", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{LastSuccess: now.Add(-interval - time.Nanosecond)}}, want: "+2 -1 stale"},
+		{name: "failed without prior data", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{Error: "offline"}}, want: "+2 -1 failed"},
+		{name: "failed with prior data", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{LastSuccess: now.Add(-time.Minute), Error: "offline"}}, want: "+2 -1 stale"},
+		{name: "cached", snapshot: repositorySnapshot{repoStatus: comparable}, want: "+2 -1 cached"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := remoteText(test.snapshot, now, interval); got != test.want {
+				t.Fatalf("remote text = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSelectedDetailsShowSanitizedErrorsAndTimestamps(t *testing.T) {
+	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
+	snapshot := repositorySnapshot{
+		repoStatus: repoStatus{
+			Path:        "repo",
+			Branch:      "topic\x1b",
+			Ahead:       2,
+			HasRemote:   true,
+			HasUpstream: true,
+		},
+		Fetch: fetchStatus{
+			LastAttempt: now.Add(-2 * time.Minute),
+			LastSuccess: now.Add(-10 * time.Minute),
+			Duration:    2 * time.Second,
+			Error:       "credential\x1b[31m\nrejected",
+		},
+	}
+	output := renderSnapshot([]repositorySnapshot{snapshot}, 80, "repo", now, defaultFetchInterval)
+	for _, want := range []string{
+		"remote: +2 stale; freshness interval 3m0s",
+		"fetch: failed; attempted 2026-08-25T11:58:00Z; duration 2s",
+		"last success: 2026-08-25T11:50:00Z",
+		"fetch error: credential?[31m rejected",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("selected detail missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "\x1b") {
+		t.Fatalf("selected detail contains a control character: %q", output)
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if len([]rune(line)) > 80 {
+			t.Fatalf("detail line exceeded width: %q", line)
+		}
 	}
 }
 

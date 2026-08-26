@@ -308,7 +308,7 @@ func severity(status repoStatus) int {
 }
 
 func render(output io.Writer, statuses []repositorySnapshot) error {
-	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, ""))
+	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, "", time.Now(), defaultFetchInterval))
 	return err
 }
 
@@ -339,26 +339,6 @@ func worktreeText(status repoStatus) string {
 	}
 	if len(parts) == 0 {
 		return "clean"
-	}
-	return strings.Join(parts, " ")
-}
-
-func remoteText(status repoStatus) string {
-	if status.Error != "" {
-		return "error"
-	}
-	if !status.HasUpstream {
-		return "no upstream"
-	}
-	var parts []string
-	if status.Ahead > 0 {
-		parts = append(parts, fmt.Sprintf("+%d", status.Ahead))
-	}
-	if status.Behind > 0 {
-		parts = append(parts, fmt.Sprintf("-%d", status.Behind))
-	}
-	if len(parts) == 0 {
-		return "ok"
 	}
 	return strings.Join(parts, " ")
 }

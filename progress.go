@@ -51,6 +51,7 @@ type terminalDashboard struct {
 	last     string
 	err      error
 	now      func() time.Time
+	interval time.Duration
 }
 
 func terminalDashboardFor(output io.Writer) *terminalDashboard {
@@ -71,7 +72,7 @@ func terminalDashboardFor(output io.Writer) *terminalDashboard {
 }
 
 func newTerminalDashboard(output io.Writer, width func() int) *terminalDashboard {
-	return &terminalDashboard{output: output, width: width, now: time.Now}
+	return &terminalDashboard{output: output, width: width, now: time.Now, interval: defaultFetchInterval}
 }
 
 func (dashboard *terminalDashboard) publish(statuses []repositorySnapshot) {
@@ -100,7 +101,7 @@ func (dashboard *terminalDashboard) drawLocked() {
 	if dashboard.err != nil {
 		return
 	}
-	view := renderSnapshot(dashboard.latest, dashboard.width(), dashboard.selected)
+	view := renderSnapshot(dashboard.latest, dashboard.width(), dashboard.selected, dashboard.now(), dashboard.interval)
 	if view == dashboard.last {
 		return
 	}

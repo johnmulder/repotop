@@ -201,6 +201,26 @@ func TestRefreshRemotesCancellation(t *testing.T) {
 	}
 }
 
+func TestRefreshRemotesSkipsRepositoryWithoutRemote(t *testing.T) {
+	coordinator := newRepositoryCoordinator()
+	generation := coordinator.beginScan()
+	coordinator.apply(repositoryUpdate{Generation: generation, Repository: "/repo", Status: repoStatus{Path: "repo", Branch: "main"}})
+	coordinator.completeScan(generation, []string{"/repo"})
+
+	called := false
+	err := refreshRemotes(context.Background(), coordinator, "/", []string{"/repo"},
+		func(context.Context, string) error {
+			called = true
+			return nil
+		}, inspectRepository, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called || !coordinator.snapshot()[0].Fetch.LastAttempt.IsZero() {
+		t.Fatalf("repository without remote was fetched: called=%t snapshot=%+v", called, coordinator.snapshot()[0])
+	}
+}
+
 func TestRefreshRepositoriesBoundsConcurrency(t *testing.T) {
 	coordinator := newRepositoryCoordinator()
 	repositories := make([]string, 32)
