@@ -327,6 +327,8 @@ The scheduler's coordinator is the sole owner of the repository map. Inspection 
 
 Remote refresh uses a fixed four-worker batch after local inspection. Repository roots are deduplicated before queueing, fetch failures are stored independently from local status, and successful fetches trigger local reinspection for current ahead/behind counts. Fetch commands are limited to `git fetch --prune`, disable terminal prompts, and inherit cancellation plus an internal deadline. `--no-fetch` skips the batch completely.
 
+Rendering is a pure transformation of a sorted snapshot, terminal width, and selected repository path. Wide, compact, and narrow ASCII layouts reserve status space and middle-truncate repository paths. Real terminals repaint the first result immediately, coalesce rapid updates, redraw the latest snapshot after resize, and keep selection attached to repository identity; redirected output remains a single final snapshot without terminal controls.
+
 ## Dependencies
 
 Minimize external dependencies.

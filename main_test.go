@@ -342,6 +342,9 @@ func TestRunNoFetch(t *testing.T) {
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("fetch marker with --no-fetch: %v", err)
 	}
+	if strings.Contains(stdout.String(), "\x1b[") || strings.Count(stdout.String(), "REPOSITORY") != 1 {
+		t.Fatalf("non-terminal no-fetch output was progressive: %q", stdout.String())
+	}
 
 	stdout.Reset()
 	stderr.Reset()
@@ -350,6 +353,9 @@ func TestRunNoFetch(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatalf("default fetch marker: %v", err)
+	}
+	if strings.Contains(stdout.String(), "\x1b[") || strings.Count(stdout.String(), "REPOSITORY") != 1 {
+		t.Fatalf("non-terminal fetch output was progressive: %q", stdout.String())
 	}
 }
 

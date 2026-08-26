@@ -15,7 +15,9 @@ func refreshRemotes(
 	repositories []string,
 	fetch func(context.Context, string) error,
 	inspect func(context.Context, string, string) repoStatus,
+	publish snapshotPublisher,
 ) error {
+	emitter := newSnapshotEmitter(coordinator, publish, time.Now)
 	unique := make([]string, 0, len(repositories))
 	seen := make(map[string]struct{}, len(repositories))
 	for _, repository := range repositories {
@@ -86,7 +88,13 @@ func refreshRemotes(
 	}()
 
 	for update := range updates {
-		coordinator.applyFetch(update)
+		if coordinator.applyFetch(update) {
+			emitter.updated()
+		}
 	}
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	emitter.finished()
+	return nil
 }

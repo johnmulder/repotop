@@ -136,7 +136,7 @@ func TestRefreshRemotesBoundsDeduplicatesAndIsolatesFailures(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- refreshRemotes(context.Background(), coordinator, "/root", requests, fetch, inspect)
+		done <- refreshRemotes(context.Background(), coordinator, "/root", requests, fetch, inspect, nil)
 	}()
 	for range remoteFetchWorkers {
 		<-started
@@ -188,7 +188,7 @@ func TestRefreshRemotesCancellation(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- refreshRemotes(ctx, coordinator, "/", []string{"/repo"}, fetch, inspectRepository)
+		done <- refreshRemotes(ctx, coordinator, "/", []string{"/repo"}, fetch, inspectRepository, nil)
 	}()
 	<-started
 	cancel()
@@ -219,7 +219,7 @@ func TestRefreshRepositoriesBoundsConcurrency(t *testing.T) {
 		return repoStatus{Path: relative, Branch: "main"}
 	}
 
-	if err := refreshRepositories(context.Background(), coordinator, "/root", repositories, inspect); err != nil {
+	if err := refreshRepositories(context.Background(), coordinator, "/root", repositories, inspect, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := maximum.Load(); got < 2 || got > localStatusWorkers {
@@ -245,7 +245,7 @@ func TestCanceledRefreshPreservesPriorSnapshot(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- refreshRepositories(ctx, coordinator, "/", []string{"/new"}, inspect)
+		done <- refreshRepositories(ctx, coordinator, "/", []string{"/new"}, inspect, nil)
 	}()
 	<-started
 	cancel()

@@ -114,13 +114,16 @@ func refreshRepositories(
 	root string,
 	repositories []string,
 	inspect func(context.Context, string, string) repoStatus,
+	publish snapshotPublisher,
 ) error {
+	emitter := newSnapshotEmitter(coordinator, publish, time.Now)
 	generation := coordinator.beginScan()
 	if len(repositories) == 0 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		coordinator.completeScan(generation, repositories)
+		emitter.finished()
 		return nil
 	}
 
@@ -169,11 +172,14 @@ func refreshRepositories(
 	}()
 
 	for update := range updates {
-		coordinator.apply(update)
+		if coordinator.apply(update) {
+			emitter.updated()
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	coordinator.completeScan(generation, repositories)
+	emitter.finished()
 	return nil
 }

@@ -86,13 +86,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dashboard := terminalDashboardFor(stdout)
+	var publish snapshotPublisher
+	if dashboard != nil {
+		publish = dashboard.publish
+		stopResize := watchTerminalResize(ctx, dashboard)
+		defer stopResize()
+	}
 	coordinator := newRepositoryCoordinator()
-	if err := refreshRepositories(context.Background(), coordinator, absRoot, repositories, inspectRepository); err != nil {
+	if err := refreshRepositories(ctx, coordinator, absRoot, repositories, inspectRepository, publish); err != nil {
 		fmt.Fprintf(stderr, "repotop: inspect: %v\n", err)
 		return 1
 	}
 	if !*noFetch {
-		if err := refreshRemotes(context.Background(), coordinator, absRoot, repositories, fetchRepository, inspectRepository); err != nil {
+		if err := refreshRemotes(ctx, coordinator, absRoot, repositories, fetchRepository, inspectRepository, publish); err != nil {
 			fmt.Fprintf(stderr, "repotop: fetch: %v\n", err)
 			return 1
 		}
@@ -114,7 +123,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(filepath.ToSlash(relative)), fetch.Error)
 	}
-	if err := render(stdout, statuses); err != nil {
+	if dashboard != nil {
+		dashboard.publish(statuses)
+		if err := dashboard.writeError(); err != nil {
+			fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+			return 1
+		}
+	} else if err := render(stdout, statuses); err != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
 		return 1
 	}
