@@ -8,28 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Render progressive results deterministically
-
-**Priority:** P0
-
-### Gap
-
-The desired interface depends on partial results and continuously changing state. Without stable ordering and explicit width behavior, rows will jump during refresh, long paths will destroy columns, and narrow terminals may hide the most useful information.
-
-### Approach
-
-Make rendering a pure transformation from a snapshot plus terminal dimensions to rows. Display each repository as soon as its local inspection completes, but use deterministic severity and path keys so the order settles predictably. Define a compact layout for narrow terminals rather than relying on clipping by the terminal.
-
-### Implementation considerations
-
-- Assign every status exactly one primary sort bucket, then sort by relative path; explicitly decide where diverged and conflicted repositories rank.
-- Reserve space for status columns and truncate repository paths in the middle so the distinguishing suffix remains visible.
-- Handle terminal resize events and preserve the selected repository by identity rather than row index.
-- Coalesce rapid updates to prevent flicker and excessive CPU use.
-- Make color a presentation layer over authoritative text.
-- Golden-test the renderer at several widths using the ASCII palette proposed below.
-
-## 2. Make failure and freshness states unambiguous
+## 1. Make failure and freshness states unambiguous
 
 **Priority:** P0
 
@@ -50,7 +29,7 @@ Model local inspection, remote relationship, fetch activity, and data freshness 
 - Sanitize control characters in Git diagnostics before displaying them in a terminal.
 - Keep detailed failures available without turning the main table into a log viewer.
 
-## 3. Make every non-ASCII glyph deliberate and detectable
+## 2. Make every non-ASCII glyph deliberate and detectable
 
 **Priority:** P1
 
@@ -82,7 +61,7 @@ Unicode       ASCII
 - Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
 - Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
 
-## 4. Test behavior with disposable real Git repositories
+## 3. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -103,7 +82,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 5. Add one-shot output by reusing the same snapshot model
+## 4. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -123,7 +102,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 6. Add scan exclusions only when traversal data justifies them
+## 5. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -145,4 +124,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Implement proposals 1–2 to complete the responsive version 0.1 dashboard. Proposals 3 and 4 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 5 is the smallest useful extension once the interactive core is stable. Proposal 6 should remain deferred until measured traversal problems appear.
+Implement proposal 1 to complete the responsive version 0.1 dashboard. Proposals 2 and 3 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 4 is the smallest useful extension once the interactive core is stable. Proposal 5 should remain deferred until measured traversal problems appear.
