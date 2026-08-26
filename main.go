@@ -40,11 +40,24 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("repotop", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--ascii] [--fetch|--no-fetch] [--once] [directory]") }
+	flags.Usage = func() {
+		fmt.Fprintln(stderr, "usage: repotop [options] [directory]")
+		flags.PrintDefaults()
+	}
+	var exclusionNames []string
 	forceASCII := flags.Bool("ascii", false, "use plain ASCII symbols")
+	flags.Func("exclude", "skip a root-relative directory (repeatable)", func(value string) error {
+		exclusion, err := normalizeExclusion(value)
+		if err != nil {
+			return err
+		}
+		exclusionNames = append(exclusionNames, exclusion)
+		return nil
+	})
 	forceFetch := flags.Bool("fetch", false, "fetch remotes before rendering")
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 	once := flags.Bool("once", false, "render one final snapshot")
+	scanStats := flags.Bool("scan-stats", false, "report discovery timing and counts")
 
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -82,8 +95,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "repotop: %s: not a directory\n", safeCell(root))
 		return 1
 	}
+	exclusions, err := resolveExclusions(absRoot, exclusionNames)
+	if err != nil {
+		fmt.Fprintf(stderr, "repotop: %v\n", err)
+		return 2
+	}
 
-	repositories, scanErrors, err := discover(context.Background(), absRoot, nil)
+	scanStarted := time.Now()
+	repositories, scanErrors, err := discover(context.Background(), absRoot, exclusions)
+	scanDuration := time.Since(scanStarted)
+	if *scanStats {
+		fmt.Fprintf(stderr, "scan: %s, %d %s, %d %s\n",
+			scanDuration.Round(time.Microsecond),
+			len(repositories), plural(len(repositories), "repo"),
+			len(exclusions), plural(len(exclusions), "exclusion"))
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "repotop: scan: %v\n", err)
 		return 1
@@ -141,6 +167,36 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func normalizeExclusion(value string) (string, error) {
+	if value == "" || filepath.IsAbs(value) {
+		return "", errors.New("exclusion must be a non-empty root-relative path")
+	}
+	value = filepath.Clean(value)
+	if value == "." || value == ".." || strings.HasPrefix(value, ".."+string(filepath.Separator)) {
+		return "", errors.New("exclusion must name a directory beneath the scan root")
+	}
+	return value, nil
+}
+
+func resolveExclusions(root string, names []string) (map[string]struct{}, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	exclusions := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		path := filepath.Join(root, name)
+		info, err := os.Lstat(path)
+		if err != nil {
+			return nil, fmt.Errorf("exclude %s: %w", safeCell(name), err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("exclude %s: not a directory", safeCell(name))
+		}
+		exclusions[path] = struct{}{}
+	}
+	return exclusions, nil
 }
 
 func discover(ctx context.Context, root string, exclusions map[string]struct{}) ([]string, []error, error) {

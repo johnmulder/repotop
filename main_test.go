@@ -72,6 +72,36 @@ func TestDiscoverExcludesExactSubtreesWithoutReadingGitignore(t *testing.T) {
 	}
 }
 
+func TestExclusionValidation(t *testing.T) {
+	root := t.TempDir()
+	vendor := filepath.Join(root, "vendor")
+	mustMkdir(t, vendor)
+	file := filepath.Join(root, "file")
+	mustWrite(t, file, "ordinary\n")
+
+	for _, value := range []string{"", ".", "..", filepath.Join("..", "outside"), filepath.Join(root, "absolute")} {
+		if _, err := normalizeExclusion(value); err == nil {
+			t.Fatalf("normalizeExclusion(%q) succeeded", value)
+		}
+	}
+	if got, err := normalizeExclusion(filepath.Join("group", "..", "vendor")); err != nil || got != "vendor" {
+		t.Fatalf("normalized exclusion = %q, %v", got, err)
+	}
+
+	exclusions, err := resolveExclusions(root, []string{"vendor", "vendor"})
+	if err != nil || len(exclusions) != 1 {
+		t.Fatalf("resolved exclusions = %v, %v", exclusions, err)
+	}
+	if _, ok := exclusions[vendor]; !ok {
+		t.Fatalf("resolved exclusions missing %s: %v", vendor, exclusions)
+	}
+	for _, value := range []string{"file", "missing"} {
+		if _, err := resolveExclusions(root, []string{value}); err == nil {
+			t.Fatalf("resolveExclusions(%q) succeeded", value)
+		}
+	}
+}
+
 func TestDiscoverDoesNotFollowSymlinks(t *testing.T) {
 	root := t.TempDir()
 	repository := filepath.Join(root, "repo")
@@ -403,7 +433,8 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("help exit = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "usage: repotop [--ascii] [--fetch|--no-fetch] [--once] [directory]") {
+	if !strings.Contains(stderr.String(), "usage: repotop [options] [directory]") ||
+		!strings.Contains(stderr.String(), "-exclude value") || !strings.Contains(stderr.String(), "-scan-stats") {
 		t.Fatalf("unexpected help: %q", stderr.String())
 	}
 
@@ -431,6 +462,9 @@ func TestRunOneShotFetchPolicy(t *testing.T) {
 	if strings.Contains(stdout.String(), "\x1b[") || strings.Count(stdout.String(), "REPOSITORY") != 1 {
 		t.Fatalf("default one-shot output was progressive: %q", stdout.String())
 	}
+	if stderr.Len() != 0 {
+		t.Fatalf("default one-shot wrote scan statistics: %q", stderr.String())
+	}
 
 	stdout.Reset()
 	stderr.Reset()
@@ -451,6 +485,58 @@ func TestRunOneShotFetchPolicy(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "mutually exclusive") {
 		t.Fatalf("conflicting fetch flags error: %q", stderr.String())
+	}
+}
+
+func TestRunRepeatedExclusionsAndScanStats(t *testing.T) {
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MODE", "run")
+	t.Setenv("FAKE_GIT_MARKER", filepath.Join(t.TempDir(), "fetch"))
+	root := t.TempDir()
+	for _, directory := range []string{"build", "ignored", "kept", "vendor"} {
+		mustMkdir(t, filepath.Join(root, directory, ".git"))
+	}
+	mustWrite(t, filepath.Join(root, ".gitignore"), "ignored\n")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--ascii", "--once", "--scan-stats",
+		"--exclude", "vendor", "--exclude", "build", root,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("excluded scan exit = %d, stderr = %q", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "ignored") || !strings.Contains(output, "kept") ||
+		strings.Contains(output, "vendor") || strings.Contains(output, "build") {
+		t.Fatalf("excluded scan output: %q", output)
+	}
+	if !strings.Contains(stderr.String(), "scan: ") || !strings.Contains(stderr.String(), "2 repos, 2 exclusions") {
+		t.Fatalf("scan statistics: %q", stderr.String())
+	}
+}
+
+func TestRunRejectsInvalidExclusions(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "file"), "ordinary\n")
+	tests := []struct {
+		value string
+		want  string
+	}{
+		{value: "..", want: "beneath the scan root"},
+		{value: "file", want: "not a directory"},
+		{value: "missing", want: "no such file"},
+	}
+	for _, test := range tests {
+		t.Run(test.value, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"--exclude", test.value, root}, &stdout, &stderr); code != 2 {
+				t.Fatalf("invalid exclusion exit = %d, stderr = %q", code, stderr.String())
+			}
+			if !strings.Contains(strings.ToLower(stderr.String()), test.want) {
+				t.Fatalf("invalid exclusion error = %q, want %q", stderr.String(), test.want)
+			}
+		})
 	}
 }
 
