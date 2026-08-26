@@ -383,7 +383,7 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("help exit = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "usage: repotop [--ascii] [--no-fetch] [directory]") {
+	if !strings.Contains(stderr.String(), "usage: repotop [--ascii] [--fetch|--no-fetch] [--once] [directory]") {
 		t.Fatalf("unexpected help: %q", stderr.String())
 	}
 
@@ -393,7 +393,7 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	}
 }
 
-func TestRunNoFetch(t *testing.T) {
+func TestRunOneShotFetchPolicy(t *testing.T) {
 	installFakeGit(t)
 	t.Setenv("FAKE_GIT_MODE", "run")
 	marker := filepath.Join(t.TempDir(), "fetch")
@@ -402,26 +402,61 @@ func TestRunNoFetch(t *testing.T) {
 	mustMkdir(t, filepath.Join(root, ".git"))
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--no-fetch", root}, &stdout, &stderr); code != 0 {
-		t.Fatalf("no-fetch exit = %d, stderr = %q", code, stderr.String())
+	if code := run([]string{root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("default one-shot exit = %d, stderr = %q", code, stderr.String())
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("fetch marker with --no-fetch: %v", err)
+		t.Fatalf("default one-shot fetched: %v", err)
 	}
 	if strings.Contains(stdout.String(), "\x1b[") || strings.Count(stdout.String(), "REPOSITORY") != 1 {
-		t.Fatalf("non-terminal no-fetch output was progressive: %q", stdout.String())
+		t.Fatalf("default one-shot output was progressive: %q", stdout.String())
 	}
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := run([]string{root}, &stdout, &stderr); code != 0 {
-		t.Fatalf("default fetch exit = %d, stderr = %q", code, stderr.String())
+	if code := run([]string{"--fetch", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("explicit fetch exit = %d, stderr = %q", code, stderr.String())
 	}
 	if _, err := os.Stat(marker); err != nil {
-		t.Fatalf("default fetch marker: %v", err)
+		t.Fatalf("explicit fetch marker: %v", err)
 	}
 	if strings.Contains(stdout.String(), "\x1b[") || strings.Count(stdout.String(), "REPOSITORY") != 1 {
-		t.Fatalf("non-terminal fetch output was progressive: %q", stdout.String())
+		t.Fatalf("explicit-fetch output was progressive: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--fetch", "--no-fetch", root}, &stdout, &stderr); code != 2 {
+		t.Fatalf("conflicting fetch flags exit = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "mutually exclusive") {
+		t.Fatalf("conflicting fetch flags error: %q", stderr.String())
+	}
+}
+
+func TestRunOneShotRepositoryStatesAreData(t *testing.T) {
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MARKER", filepath.Join(t.TempDir(), "fetch"))
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, ".git"))
+
+	for _, test := range []struct {
+		mode string
+		want string
+	}{
+		{mode: "run-behind", want: "-1 cached"},
+		{mode: "run-dirty", want: "M1"},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			t.Setenv("FAKE_GIT_MODE", test.mode)
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"--ascii", "--once", root}, &stdout, &stderr); code != 0 {
+				t.Fatalf("repository-state exit = %d, stderr = %q", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), test.want) || strings.Contains(stdout.String(), "\x1b[") {
+				t.Fatalf("one-shot state output: %q", stdout.String())
+			}
+		})
 	}
 }
 

@@ -133,9 +133,15 @@ case "$FAKE_GIT_MODE" in
   environment) printf "%s" "$GIT_OPTIONAL_LOCKS" ;;
   fetch) printf "%s|%s|%s" "$GIT_TERMINAL_PROMPT" "$3" "$4" > "$FAKE_GIT_MARKER" ;;
   timeout) exec /bin/sleep 5 ;;
-  run)
+  run|run-behind|run-dirty)
     if [ "$3" = fetch ]; then
       : > "$FAKE_GIT_MARKER"
+    elif [ "$3" = remote ]; then
+      printf 'origin\n'
+    elif [ "$FAKE_GIT_MODE" = run-behind ]; then
+      printf '# branch.head main\0# branch.upstream origin/main\0# branch.ab +0 -1\0'
+    elif [ "$FAKE_GIT_MODE" = run-dirty ]; then
+      printf '# branch.head main\0# branch.upstream origin/main\0# branch.ab +0 -0\0001 .M N... 100644 100644 100644 abc def tracked.txt\0'
     else
       printf '# branch.head main\0# branch.upstream origin/main\0# branch.ab +0 -0\0'
     fi

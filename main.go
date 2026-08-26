@@ -40,9 +40,11 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("repotop", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--ascii] [--no-fetch] [directory]") }
+	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--ascii] [--fetch|--no-fetch] [--once] [directory]") }
 	forceASCII := flags.Bool("ascii", false, "use plain ASCII symbols")
+	forceFetch := flags.Bool("fetch", false, "fetch remotes before rendering")
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
+	once := flags.Bool("once", false, "render one final snapshot")
 
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -52,6 +54,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if flags.NArg() > 1 {
 		fmt.Fprintln(stderr, "repotop: expected at most one directory")
+		flags.Usage()
+		return 2
+	}
+	if *forceFetch && *noFetch {
+		fmt.Fprintln(stderr, "repotop: --fetch and --no-fetch are mutually exclusive")
 		flags.Usage()
 		return 2
 	}
@@ -91,7 +98,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dashboard := terminalDashboardFor(stdout, palette)
+	var dashboard *terminalDashboard
+	if !*once {
+		dashboard = terminalDashboardFor(stdout, palette)
+	}
+	oneShot := dashboard == nil
 	var publish snapshotPublisher
 	if dashboard != nil {
 		publish = dashboard.publish
@@ -103,7 +114,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "repotop: inspect: %v\n", err)
 		return 1
 	}
-	if !*noFetch {
+	if !*noFetch && (!oneShot || *forceFetch) {
 		if err := refreshRemotes(ctx, coordinator, absRoot, repositories, fetchRepository, inspectRepository, publish); err != nil {
 			fmt.Fprintf(stderr, "repotop: fetch: %v\n", err)
 			return 1
