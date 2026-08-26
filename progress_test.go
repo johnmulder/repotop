@@ -77,7 +77,7 @@ func TestRefreshPipelinesPublishProgressAndCompletion(t *testing.T) {
 func TestTerminalDashboardRepaintsOnChangeAndResizeByIdentity(t *testing.T) {
 	var output bytes.Buffer
 	width := 80
-	dashboard := newTerminalDashboard(&output, func() int { return width })
+	dashboard := newTerminalDashboard(&output, func() int { return width }, asciiPalette)
 	dashboard.publish(snapshotsOf(repoStatus{Path: "z-selected", Branch: "main", HasUpstream: true}))
 	dashboard.publish(snapshotsOf(
 		repoStatus{Path: "a-error", Error: "broken"},

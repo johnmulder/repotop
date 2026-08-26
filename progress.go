@@ -52,9 +52,10 @@ type terminalDashboard struct {
 	err      error
 	now      func() time.Time
 	interval time.Duration
+	palette  renderPalette
 }
 
-func terminalDashboardFor(output io.Writer) *terminalDashboard {
+func terminalDashboardFor(output io.Writer, palette renderPalette) *terminalDashboard {
 	file, ok := output.(*os.File)
 	if !ok {
 		return nil
@@ -68,11 +69,11 @@ func terminalDashboardFor(output io.Writer) *terminalDashboard {
 			return defaultRenderWidth
 		}
 		return width
-	})
+	}, palette)
 }
 
-func newTerminalDashboard(output io.Writer, width func() int) *terminalDashboard {
-	return &terminalDashboard{output: output, width: width, now: time.Now, interval: defaultFetchInterval}
+func newTerminalDashboard(output io.Writer, width func() int, palette renderPalette) *terminalDashboard {
+	return &terminalDashboard{output: output, width: width, now: time.Now, interval: defaultFetchInterval, palette: palette}
 }
 
 func (dashboard *terminalDashboard) publish(statuses []repositorySnapshot) {
@@ -101,7 +102,7 @@ func (dashboard *terminalDashboard) drawLocked() {
 	if dashboard.err != nil {
 		return
 	}
-	view := renderSnapshot(dashboard.latest, dashboard.width(), dashboard.selected, dashboard.now(), dashboard.interval)
+	view := renderSnapshot(dashboard.latest, dashboard.width(), dashboard.selected, dashboard.now(), dashboard.interval, dashboard.palette)
 	if view == dashboard.last {
 		return
 	}

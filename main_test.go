@@ -202,7 +202,7 @@ func TestRender(t *testing.T) {
 		{Path: "clean", Branch: "main", HasUpstream: true},
 	}
 	var output bytes.Buffer
-	if err := render(&output, snapshotsOf(statuses...)); err != nil {
+	if err := render(&output, snapshotsOf(statuses...), asciiPalette); err != nil {
 		t.Fatal(err)
 	}
 	want := "REPOSITORY                        BRANCH            WORKTREE      REMOTE\n" +
@@ -246,7 +246,7 @@ func TestRenderCompactAndNarrowGolden(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := renderSnapshot(snapshotsOf(statuses...), test.width, "", time.Unix(100, 0), defaultFetchInterval); got != test.want {
+			if got := renderSnapshot(snapshotsOf(statuses...), test.width, "", time.Unix(100, 0), defaultFetchInterval, asciiPalette); got != test.want {
 				t.Fatalf("render output:\n%q\nwant:\n%q", got, test.want)
 			}
 		})
@@ -262,7 +262,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 		t.Fatalf("middle truncation = %q", got)
 	}
 	for _, width := range []int{80, 50, 30, 10} {
-		output := renderSnapshot(snapshotsOf(statuses...), width, "target", time.Unix(100, 0), defaultFetchInterval)
+		output := renderSnapshot(snapshotsOf(statuses...), width, "target", time.Unix(100, 0), defaultFetchInterval, asciiPalette)
 		for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
 			if len([]rune(line)) > width {
 				t.Fatalf("width %d line has %d characters: %q", width, len([]rune(line)), line)
@@ -282,7 +282,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 
 func TestRenderSingularSummary(t *testing.T) {
 	var output bytes.Buffer
-	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"})); err != nil {
+	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"}), asciiPalette); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "1 repo (0 clean, 0 dirty, 0 ahead, 0 behind, 1 error)") {
@@ -311,7 +311,7 @@ func TestFreshnessStatesPreserveKnownDistance(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := remoteText(test.snapshot, now, interval); got != test.want {
+			if got := remoteText(test.snapshot, now, interval, asciiPalette); got != test.want {
 				t.Fatalf("remote text = %q, want %q", got, test.want)
 			}
 		})
@@ -335,7 +335,7 @@ func TestSelectedDetailsShowSanitizedErrorsAndTimestamps(t *testing.T) {
 			Error:       "credential\x1b[31m\nrejected",
 		},
 	}
-	output := renderSnapshot([]repositorySnapshot{snapshot}, 80, "repo", now, defaultFetchInterval)
+	output := renderSnapshot([]repositorySnapshot{snapshot}, 80, "repo", now, defaultFetchInterval, asciiPalette)
 	for _, want := range []string{
 		"remote: +2 stale; freshness interval 3m0s",
 		"fetch: failed; attempted 2026-08-25T11:58:00Z; duration 2s",
@@ -384,7 +384,7 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("help exit = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "usage: repotop [--no-fetch] [directory]") {
+	if !strings.Contains(stderr.String(), "usage: repotop [--ascii] [--no-fetch] [directory]") {
 		t.Fatalf("unexpected help: %q", stderr.String())
 	}
 

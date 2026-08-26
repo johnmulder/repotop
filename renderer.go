@@ -21,7 +21,7 @@ type renderRow struct {
 	Remote   string
 }
 
-func renderSnapshot(statuses []repositorySnapshot, width int, selected string, now time.Time, fetchInterval time.Duration) string {
+func renderSnapshot(statuses []repositorySnapshot, width int, selected string, now time.Time, fetchInterval time.Duration, palette renderPalette) string {
 	if width <= 0 {
 		width = defaultRenderWidth
 	}
@@ -33,7 +33,7 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 		branch := status.Branch
 		if status.Error != "" {
 			failures++
-			branch = "-"
+			branch = palette.missing
 		} else if status.dirty() {
 			dirty++
 		} else {
@@ -49,16 +49,16 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 			Path:     safeCell(status.Path),
 			Branch:   safeCell(branch),
 			Worktree: worktreeText(status.repoStatus),
-			Remote:   remoteText(status, now, fetchInterval),
+			Remote:   remoteText(status, now, fetchInterval, palette),
 		})
 	}
 
 	prefixWidth := 0
 	if selected != "" {
-		prefixWidth = 2
+		prefixWidth = utf8.RuneCountInString(palette.selection)
 	}
 	contentWidth := max(1, width-prefixWidth)
-	lines := renderTable(rows, ordered, contentWidth, width, selected)
+	lines := renderTable(rows, ordered, contentWidth, width, selected, palette)
 	for index := range lines {
 		lines[index] = fitLine(lines[index], width)
 	}
@@ -67,7 +67,7 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 		for _, status := range ordered {
 			if status.Path == selected {
 				lines = append(lines, "")
-				lines = append(lines, renderDetails(status, width, now, fetchInterval)...)
+				lines = append(lines, renderDetails(status, width, now, fetchInterval, palette)...)
 				break
 			}
 		}
@@ -75,7 +75,7 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutWidth int, selected string) []string {
+func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutWidth int, selected string, palette renderPalette) []string {
 	var lines []string
 	switch {
 	case layoutWidth >= wideLayoutWidth:
@@ -83,22 +83,22 @@ func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutW
 		pathWidth := max(1, width-branchWidth-worktreeWidth-remoteWidth-6)
 		lines = append(lines,
 			wideLine("REPOSITORY", "BRANCH", "WORKTREE", "REMOTE", pathWidth, branchWidth, worktreeWidth, remoteWidth),
-			wideLine(strings.Repeat("-", pathWidth), strings.Repeat("-", branchWidth), strings.Repeat("-", worktreeWidth), strings.Repeat("-", remoteWidth), pathWidth, branchWidth, worktreeWidth, remoteWidth),
+			wideLine(strings.Repeat(palette.rule, pathWidth), strings.Repeat(palette.rule, branchWidth), strings.Repeat(palette.rule, worktreeWidth), strings.Repeat(palette.rule, remoteWidth), pathWidth, branchWidth, worktreeWidth, remoteWidth),
 		)
 		for index, row := range rows {
 			line := wideLine(row.Path, row.Branch, row.Worktree, row.Remote, pathWidth, branchWidth, worktreeWidth, remoteWidth)
-			lines = append(lines, selectionPrefix(statuses[index].Path, selected)+line)
+			lines = append(lines, selectionPrefix(statuses[index].Path, selected, palette)+line)
 		}
 	case layoutWidth >= compactLayoutWidth:
 		const worktreeWidth, remoteWidth = 12, 14
 		pathWidth := max(1, width-worktreeWidth-remoteWidth-4)
 		lines = append(lines,
 			compactLine("REPOSITORY", "WORKTREE", "REMOTE", pathWidth, worktreeWidth, remoteWidth),
-			compactLine(strings.Repeat("-", pathWidth), strings.Repeat("-", worktreeWidth), strings.Repeat("-", remoteWidth), pathWidth, worktreeWidth, remoteWidth),
+			compactLine(strings.Repeat(palette.rule, pathWidth), strings.Repeat(palette.rule, worktreeWidth), strings.Repeat(palette.rule, remoteWidth), pathWidth, worktreeWidth, remoteWidth),
 		)
 		for index, row := range rows {
 			line := compactLine(row.Path, row.Worktree, row.Remote, pathWidth, worktreeWidth, remoteWidth)
-			lines = append(lines, selectionPrefix(statuses[index].Path, selected)+line)
+			lines = append(lines, selectionPrefix(statuses[index].Path, selected, palette)+line)
 		}
 	default:
 		stateWidth := min(20, max(5, width*2/3))
@@ -106,16 +106,17 @@ func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutW
 		stateWidth = max(1, width-pathWidth-2)
 		lines = append(lines,
 			narrowLine(truncateEnd("REPOSITORY", pathWidth), "STATE", pathWidth, stateWidth),
-			narrowLine(strings.Repeat("-", pathWidth), strings.Repeat("-", stateWidth), pathWidth, stateWidth),
+			narrowLine(strings.Repeat(palette.rule, pathWidth), strings.Repeat(palette.rule, stateWidth), pathWidth, stateWidth),
 		)
 		for index, row := range rows {
 			line := narrowLine(row.Path, strings.TrimSpace(row.Worktree+" "+row.Remote), pathWidth, stateWidth)
-			lines = append(lines, selectionPrefix(statuses[index].Path, selected)+line)
+			lines = append(lines, selectionPrefix(statuses[index].Path, selected, palette)+line)
 		}
 	}
 	if selected != "" {
-		lines[0] = "  " + lines[0]
-		lines[1] = "  " + lines[1]
+		indent := strings.Repeat(" ", utf8.RuneCountInString(palette.selection))
+		lines[0] = indent + lines[0]
+		lines[1] = indent + lines[1]
 	}
 	return lines
 }
@@ -137,14 +138,14 @@ func narrowLine(path, state string, pathWidth, stateWidth int) string {
 	return padRight(middleTruncate(path, pathWidth), pathWidth) + "  " + padRight(truncateEnd(state, stateWidth), stateWidth)
 }
 
-func selectionPrefix(path, selected string) string {
+func selectionPrefix(path, selected string, palette renderPalette) string {
 	if selected == "" {
 		return ""
 	}
 	if path == selected {
-		return "> "
+		return palette.selection
 	}
-	return "  "
+	return strings.Repeat(" ", utf8.RuneCountInString(palette.selection))
 }
 
 func renderSummary(width, repositories, clean, dirty, ahead, behind, failures int) string {
@@ -161,14 +162,17 @@ func renderSummary(width, repositories, clean, dirty, ahead, behind, failures in
 	}
 }
 
-func remoteText(snapshot repositorySnapshot, now time.Time, fetchInterval time.Duration) string {
+func remoteText(snapshot repositorySnapshot, now time.Time, fetchInterval time.Duration, palette renderPalette) string {
 	state := freshnessState(snapshot, now, fetchInterval)
 	switch state {
 	case "error", "no remote", "no upstream":
 		return state
 	}
-	distance := remoteDistance(snapshot.repoStatus)
+	distance := remoteDistance(snapshot.repoStatus, palette)
 	if distance == "" {
+		if state == "current" {
+			return palette.current + state
+		}
 		return state
 	}
 	return distance + " " + state
@@ -197,18 +201,18 @@ func freshnessState(snapshot repositorySnapshot, now time.Time, fetchInterval ti
 	}
 }
 
-func remoteDistance(status repoStatus) string {
+func remoteDistance(status repoStatus, palette renderPalette) string {
 	var parts []string
 	if status.Ahead > 0 {
-		parts = append(parts, fmt.Sprintf("+%d", status.Ahead))
+		parts = append(parts, fmt.Sprintf("%s%d", palette.ahead, status.Ahead))
 	}
 	if status.Behind > 0 {
-		parts = append(parts, fmt.Sprintf("-%d", status.Behind))
+		parts = append(parts, fmt.Sprintf("%s%d", palette.behind, status.Behind))
 	}
 	return strings.Join(parts, " ")
 }
 
-func renderDetails(snapshot repositorySnapshot, width int, now time.Time, fetchInterval time.Duration) []string {
+func renderDetails(snapshot repositorySnapshot, width int, now time.Time, fetchInterval time.Duration, palette renderPalette) []string {
 	lines := wrappedLine("details: "+safeCell(snapshot.Path), width)
 	if snapshot.Error != "" {
 		lines = append(lines, wrappedLine("local error: "+safeCell(oneLine(snapshot.Error)), width)...)
@@ -216,7 +220,7 @@ func renderDetails(snapshot repositorySnapshot, width int, now time.Time, fetchI
 		lines = append(lines, wrappedLine(fmt.Sprintf("local: branch %s; worktree %s", safeCell(snapshot.Branch), worktreeText(snapshot.repoStatus)), width)...)
 	}
 
-	remote := "remote: " + remoteText(snapshot, now, fetchInterval)
+	remote := "remote: " + remoteText(snapshot, now, fetchInterval, palette)
 	if snapshot.HasUpstream && fetchInterval > 0 {
 		remote += "; freshness interval " + fetchInterval.String()
 	}

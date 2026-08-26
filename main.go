@@ -40,7 +40,8 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("repotop", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--no-fetch] [directory]") }
+	flags.Usage = func() { fmt.Fprintln(stderr, "usage: repotop [--ascii] [--no-fetch] [directory]") }
+	forceASCII := flags.Bool("ascii", false, "use plain ASCII symbols")
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 
 	if err := flags.Parse(args); err != nil {
@@ -54,6 +55,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		flags.Usage()
 		return 2
 	}
+	palette := selectPalette(*forceASCII, os.Getenv)
 
 	root := "."
 	if flags.NArg() == 1 {
@@ -89,7 +91,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dashboard := terminalDashboardFor(stdout)
+	dashboard := terminalDashboardFor(stdout, palette)
 	var publish snapshotPublisher
 	if dashboard != nil {
 		publish = dashboard.publish
@@ -123,7 +125,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "repotop: render: %v\n", err)
 			return 1
 		}
-	} else if err := render(stdout, statuses); err != nil {
+	} else if err := render(stdout, statuses, palette); err != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
 		return 1
 	}
@@ -307,8 +309,8 @@ func severity(status repoStatus) int {
 	}
 }
 
-func render(output io.Writer, statuses []repositorySnapshot) error {
-	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, "", time.Now(), defaultFetchInterval))
+func render(output io.Writer, statuses []repositorySnapshot, palette renderPalette) error {
+	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, "", time.Now(), defaultFetchInterval, palette))
 	return err
 }
 
