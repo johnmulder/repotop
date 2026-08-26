@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -427,22 +426,22 @@ func TestRunNoFetch(t *testing.T) {
 }
 
 func TestInspectRepositoryWithRealGit(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is required")
-	}
-	repository := t.TempDir()
-	runTestGit(t, repository, "init", "-b", "main")
-	runTestGit(t, repository, "config", "user.name", "Repotop Test")
-	runTestGit(t, repository, "config", "user.email", "repotop@example.invalid")
+	repository := newRealRepository(t)
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "initial\n")
 	runTestGit(t, repository, "add", "tracked.txt")
 	runTestGit(t, repository, "commit", "-m", "initial")
+
+	status := inspectRepository(context.Background(), repository, repository)
+	if status.Error != "" || status.Path != "." || status.Branch != "main" || status.dirty() || status.HasRemote || status.HasUpstream {
+		t.Fatalf("unexpected clean status: %+v", status)
+	}
+
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "staged\n")
 	runTestGit(t, repository, "add", "tracked.txt")
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "modified again\n")
 	mustWrite(t, filepath.Join(repository, "untracked.txt"), "new\n")
 
-	status := inspectRepository(context.Background(), repository, repository)
+	status = inspectRepository(context.Background(), repository, repository)
 	if status.Error != "" {
 		t.Fatalf("inspect error: %s", status.Error)
 	}
@@ -456,12 +455,18 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 	if status.Error != "" || !status.HasRemote || status.HasUpstream {
 		t.Fatalf("remote without upstream was not distinguished: %+v", status)
 	}
+
+	runTestGit(t, repository, "reset", "--hard", "HEAD")
+	runTestGit(t, repository, "clean", "-fd")
+	runTestGit(t, repository, "checkout", "--detach", "HEAD")
+	status = inspectRepository(context.Background(), repository, repository)
+	if status.Error != "" || status.Branch != "detached" {
+		t.Fatalf("detached repository status: %+v", status)
+	}
 }
 
 func TestInspectDiscoveredRepositoryThatDisappears(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is required")
-	}
+	requireRealGit(t)
 	root := t.TempDir()
 	repository := filepath.Join(root, "repo")
 	mustMkdir(t, repository)
@@ -493,12 +498,13 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-func runTestGit(t *testing.T, directory, operation string, args ...string) {
+func runTestGit(t *testing.T, directory, operation string, args ...string) []byte {
 	t.Helper()
 	output, err := runGit(context.Background(), directory, false, operation, args...)
 	if err != nil {
 		t.Fatalf("git %s %s: %v\n%s", operation, strings.Join(args, " "), err, output)
 	}
+	return output
 }
 
 func snapshotsOf(statuses ...repoStatus) []repositorySnapshot {
