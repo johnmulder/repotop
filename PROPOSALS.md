@@ -8,39 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Make every non-ASCII glyph deliberate and detectable
-
-**Priority:** P1
-
-### Gap
-
-The example uses an em dash, box-drawing characters, arrows, and a check mark. These improve a capable terminal but render poorly under some locales, fonts, logs, multiplexers, or copy/paste paths. Future contributors also have no way to tell whether a new departure from plain ASCII is intentional.
-
-### Approach
-
-Centralize decorative symbols in two renderer palettes: Unicode and plain ASCII. Support an explicit `--ascii` mode and choose the ASCII palette automatically when the locale does not advertise UTF-8. Keep all status meaning in text so either palette communicates the same facts.
-
-Example mappings:
-
-```text
-Unicode       ASCII
-✓             ok
-↑2            +2
-↓3            -3
-↑1 ↓2         +1 -2
-────────      --------
-—             -
-```
-
-### Implementation considerations
-
-- Keep Unicode literals out of model and Git-parsing code; only the Unicode palette should contain them.
-- Add a small source check that finds non-ASCII bytes and allows only explicitly reviewed files or literals. This makes new deviations visible in review without banning them outright.
-- Measure rendered cell width rather than byte or rune count when truncating Unicode text.
-- Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
-- Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
-
-## 2. Test behavior with disposable real Git repositories
+## 1. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -61,7 +29,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 3. Add one-shot output by reusing the same snapshot model
+## 2. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -81,7 +49,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 4. Add scan exclusions only when traversal data justifies them
+## 3. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -103,4 +71,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Proposals 1 and 2 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 3 is the smallest useful extension once the interactive core is stable. Proposal 4 should remain deferred until measured traversal problems appear.
+Proposal 1 should land before broad distribution because it protects Git correctness. Proposal 2 is the smallest useful extension once the interactive core is stable. Proposal 3 should remain deferred until measured traversal problems appear.

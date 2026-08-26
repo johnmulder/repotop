@@ -12,7 +12,7 @@ import (
 func TestNonASCIISourceIsReviewed(t *testing.T) {
 	reviewed := map[string]string{
 		"IDEA.md":      "\u2013\u2014\u2191\u2193\u2500\u2713",
-		"PROPOSALS.md": "\u2013\u2014\u2191\u2193\u2500\u2713",
+		"PROPOSALS.md": "\u2013",
 		"palette.go":   "\u2014\u203a\u2191\u2193\u2500\u2713",
 	}
 	extensions := map[string]bool{".go": true, ".md": true, ".mod": true}
