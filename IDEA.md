@@ -323,6 +323,8 @@ ui
 
 The core repository inspection logic should not depend on the TUI. This makes it straightforward to test and leaves open the possibility of a future noninteractive output mode without designing around it now.
 
+The scheduler's coordinator is the sole owner of the repository map. Inspection workers emit repository identity, scan generation, and normalized status through a channel; they never mutate shared state. The coordinator ignores obsolete generations, removes missing repositories only after a matching scan completes, and publishes copied snapshots so consumers cannot mutate its state.
+
 ## Dependencies
 
 Minimize external dependencies.

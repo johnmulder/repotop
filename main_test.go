@@ -277,7 +277,7 @@ func TestInspectRepositoryWithRealGit(t *testing.T) {
 	mustWrite(t, filepath.Join(repository, "tracked.txt"), "modified again\n")
 	mustWrite(t, filepath.Join(repository, "untracked.txt"), "new\n")
 
-	status := inspectRepository(repository, repository)
+	status := inspectRepository(context.Background(), repository, repository)
 	if status.Error != "" {
 		t.Fatalf("inspect error: %s", status.Error)
 	}
@@ -303,7 +303,7 @@ func TestInspectDiscoveredRepositoryThatDisappears(t *testing.T) {
 	if err := os.RemoveAll(repository); err != nil {
 		t.Fatal(err)
 	}
-	if status := inspectRepository(root, repository); status.Error == "" {
+	if status := inspectRepository(context.Background(), root, repository); status.Error == "" {
 		t.Fatalf("inspect missing repository = %+v, want repository-local error", status)
 	}
 }

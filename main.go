@@ -86,15 +86,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	statuses := make([]repoStatus, 0, len(repositories))
-	for _, repository := range repositories {
-		status := inspectRepository(absRoot, repository)
-		statuses = append(statuses, status)
+	coordinator := newRepositoryCoordinator()
+	if err := refreshRepositories(context.Background(), coordinator, absRoot, repositories, inspectRepository); err != nil {
+		fmt.Fprintf(stderr, "repotop: inspect: %v\n", err)
+		return 1
+	}
+	statuses := coordinator.snapshot()
+	for _, status := range statuses {
 		if status.Error != "" {
 			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
 		}
 	}
-	sortStatuses(statuses)
 	if err := render(stdout, statuses); err != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
 		return 1
@@ -144,14 +146,14 @@ func discover(ctx context.Context, root string) ([]string, []error, error) {
 	return repositories, scanErrors, nil
 }
 
-func inspectRepository(root, repository string) repoStatus {
+func inspectRepository(parent context.Context, root, repository string) repoStatus {
 	relative, err := filepath.Rel(root, repository)
 	if err != nil {
 		relative = repository
 	}
 	status := repoStatus{Path: filepath.ToSlash(relative), Branch: "unknown"}
 
-	ctx, cancel := context.WithTimeout(context.Background(), localStatusTimeout)
+	ctx, cancel := context.WithTimeout(parent, localStatusTimeout)
 	defer cancel()
 	output, err := runGit(ctx, repository, true, "status", "--porcelain=v2", "--branch", "-z")
 	if err != nil {
