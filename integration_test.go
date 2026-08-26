@@ -35,7 +35,7 @@ func TestDiscoverAndInspectRealGitWorktree(t *testing.T) {
 	commitRealFile(t, repository, "tracked.txt", "initial\n", "initial")
 	runTestGit(t, repository, "worktree", "add", "-b", "topic", worktree)
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
 	if err != nil || len(scanErrors) != 0 || !reflect.DeepEqual(repositories, []string{repository, worktree}) {
 		t.Fatalf("worktree discovery: repositories=%v errors=%v fatal=%v", repositories, scanErrors, err)
 	}

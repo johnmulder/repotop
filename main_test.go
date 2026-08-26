@@ -22,7 +22,7 @@ func TestDiscover(t *testing.T) {
 	mustWrite(t, filepath.Join(worktree, ".git"), "gitdir: elsewhere\n")
 	mustMkdir(t, filepath.Join(root, "ordinary"))
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestDiscoverRootRepository(t *testing.T) {
 	mustMkdir(t, filepath.Join(root, ".git"))
 	mustMkdir(t, filepath.Join(root, "nested", ".git"))
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, map[string]struct{}{root: {}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +49,26 @@ func TestDiscoverRootRepository(t *testing.T) {
 	}
 	if !reflect.DeepEqual(repositories, []string{root}) {
 		t.Fatalf("discover() = %v, want root only", repositories)
+	}
+}
+
+func TestDiscoverExcludesExactSubtreesWithoutReadingGitignore(t *testing.T) {
+	root := t.TempDir()
+	kept := filepath.Join(root, "kept", "repository")
+	ignored := filepath.Join(root, "ignored", "repository")
+	excluded := filepath.Join(root, "vendor")
+	mustMkdir(t, filepath.Join(kept, ".git"))
+	mustMkdir(t, filepath.Join(ignored, ".git"))
+	mustMkdir(t, filepath.Join(excluded, "repository", ".git"))
+	mustWrite(t, filepath.Join(root, ".gitignore"), "ignored\n")
+
+	repositories, scanErrors, err := discover(context.Background(), root, map[string]struct{}{excluded: {}})
+	if err != nil || len(scanErrors) != 0 {
+		t.Fatalf("discover errors: scan=%v fatal=%v", scanErrors, err)
+	}
+	want := []string{ignored, kept}
+	if !reflect.DeepEqual(repositories, want) {
+		t.Fatalf("discover() = %v, want %v", repositories, want)
 	}
 }
 
@@ -71,7 +91,7 @@ func TestDiscoverDoesNotFollowSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +102,7 @@ func TestDiscoverDoesNotFollowSymlinks(t *testing.T) {
 		t.Fatalf("discover() = %v, want only %s", repositories, repository)
 	}
 
-	repositories, scanErrors, err = discover(context.Background(), filepath.Join(root, "linked-repo"))
+	repositories, scanErrors, err = discover(context.Background(), filepath.Join(root, "linked-repo"), nil)
 	if err != nil || len(scanErrors) != 0 || len(repositories) != 0 {
 		t.Fatalf("symlink root: repositories=%v errors=%v fatal=%v", repositories, scanErrors, err)
 	}
@@ -91,7 +111,7 @@ func TestDiscoverDoesNotFollowSymlinks(t *testing.T) {
 func TestDiscoverCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	repositories, scanErrors, err := discover(ctx, t.TempDir())
+	repositories, scanErrors, err := discover(ctx, t.TempDir(), nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("discover error = %v, want context canceled", err)
 	}
@@ -114,7 +134,7 @@ func TestDiscoverContinuesAfterInaccessibleDirectory(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +527,7 @@ func TestInspectDiscoveredRepositoryThatDisappears(t *testing.T) {
 	mustMkdir(t, repository)
 	runTestGit(t, repository, "init", "-b", "main")
 
-	repositories, scanErrors, err := discover(context.Background(), root)
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
 	if err != nil || len(scanErrors) != 0 || !reflect.DeepEqual(repositories, []string{repository}) {
 		t.Fatalf("discover: repositories=%v errors=%v fatal=%v", repositories, scanErrors, err)
 	}

@@ -83,7 +83,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	repositories, scanErrors, err := discover(context.Background(), absRoot)
+	repositories, scanErrors, err := discover(context.Background(), absRoot, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "repotop: scan: %v\n", err)
 		return 1
@@ -143,7 +143,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func discover(ctx context.Context, root string) ([]string, []error, error) {
+func discover(ctx context.Context, root string, exclusions map[string]struct{}) ([]string, []error, error) {
 	var repositories []string
 	var scanErrors []error
 
@@ -160,6 +160,11 @@ func discover(ctx context.Context, root string) ([]string, []error, error) {
 		}
 		if !entry.IsDir() {
 			return nil
+		}
+		if path != root {
+			if _, excluded := exclusions[path]; excluded {
+				return fs.SkipDir
+			}
 		}
 
 		gitMarker := filepath.Join(path, ".git")
