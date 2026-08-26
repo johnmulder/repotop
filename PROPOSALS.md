@@ -8,28 +8,7 @@ Priorities mean:
 - **P1:** a high-value improvement once the basic dashboard works
 - **P2:** defer until actual use demonstrates the need
 
-## 1. Give one coordinator ownership of dashboard state
-
-**Priority:** P0
-
-### Gap
-
-Local scans and remote fetches update overlapping repository records at different speeds. If workers mutate shared records directly, late or stale results can overwrite newer branch, worktree, or fetch information and introduce data races.
-
-### Approach
-
-Use a single coordinator to own the repository map. Workers produce typed results, and the coordinator merges them into immutable snapshots consumed by the renderer. Include repository identity and scan/fetch generations in results so obsolete work can be discarded.
-
-### Implementation considerations
-
-- Keep local status, remote freshness, and transient activity as separate fields so one update cannot erase another.
-- Preserve the last successful remote comparison while a new fetch is running, but label it stale or fetching.
-- Remove repositories only after a completed rescan confirms they are absent.
-- Publish snapshots at a controlled rate to avoid redrawing once for every worker result during a large scan.
-- Prefer channels and single ownership over locks spread across the model.
-- Run tests with Go's race detector once concurrency exists.
-
-## 2. Make remote refresh bounded, deduplicated, and noninteractive
+## 1. Make remote refresh bounded, deduplicated, and noninteractive
 
 **Priority:** P0
 
@@ -50,7 +29,7 @@ Use a small fixed fetch worker pool and at most one queued or active fetch per r
 - Respect `--no-fetch` completely, including startup and the periodic timer; define whether pressing `f` remains disabled or explicitly overrides it.
 - Track last attempt, last success, duration, and concise failure independently for each repository.
 
-## 3. Render progressive results deterministically
+## 2. Render progressive results deterministically
 
 **Priority:** P0
 
@@ -71,7 +50,7 @@ Make rendering a pure transformation from a snapshot plus terminal dimensions to
 - Make color a presentation layer over authoritative text.
 - Golden-test the renderer at several widths using the ASCII palette proposed below.
 
-## 4. Make failure and freshness states unambiguous
+## 3. Make failure and freshness states unambiguous
 
 **Priority:** P0
 
@@ -92,7 +71,7 @@ Model local inspection, remote relationship, fetch activity, and data freshness 
 - Sanitize control characters in Git diagnostics before displaying them in a terminal.
 - Keep detailed failures available without turning the main table into a log viewer.
 
-## 5. Make every non-ASCII glyph deliberate and detectable
+## 4. Make every non-ASCII glyph deliberate and detectable
 
 **Priority:** P1
 
@@ -124,7 +103,7 @@ Unicode       ASCII
 - Honor `NO_COLOR`, and ensure ASCII mode remains understandable with color disabled.
 - Use ASCII golden snapshots in tests for stable diffs; add a smaller set of Unicode rendering tests for width and glyph selection.
 
-## 6. Test behavior with disposable real Git repositories
+## 5. Test behavior with disposable real Git repositories
 
 **Priority:** P1
 
@@ -145,7 +124,7 @@ Build integration tests that create temporary repositories and local bare remote
 - Test cancellation and late-result rejection as well as happy paths.
 - Skip only tests whose external prerequisites are genuinely unavailable; Git itself is a product requirement.
 
-## 7. Add one-shot output by reusing the same snapshot model
+## 6. Add one-shot output by reusing the same snapshot model
 
 **Priority:** P1
 
@@ -165,7 +144,7 @@ After version 0.1 is stable, add a one-shot mode that performs one local scan an
 - Version a future JSON schema before external users depend on it, and represent unavailable values distinctly from numeric zero.
 - Keep this read-only and resist turning it into a policy checker or CI gate inside `repotop`.
 
-## 8. Add scan exclusions only when traversal data justifies them
+## 7. Add scan exclusions only when traversal data justifies them
 
 **Priority:** P2
 
@@ -187,4 +166,4 @@ Instrument discovery duration and first rely on the built-in pruning rules: do n
 
 ## Recommended delivery order
 
-Implement proposals 1–4 to complete the responsive version 0.1 dashboard. Proposals 5 and 6 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 7 is the smallest useful extension once the interactive core is stable. Proposal 8 should remain deferred until measured traversal problems appear.
+Implement proposals 1–3 to complete the responsive version 0.1 dashboard. Proposals 4 and 5 should land before broad distribution because they protect terminal compatibility and Git correctness. Proposal 6 is the smallest useful extension once the interactive core is stable. Proposal 7 should remain deferred until measured traversal problems appear.
