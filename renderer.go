@@ -23,6 +23,10 @@ type renderRow struct {
 }
 
 func renderSnapshot(statuses []repositorySnapshot, width int, selected string, now time.Time, fetchInterval time.Duration, palette renderPalette) string {
+	return renderSnapshotSized(statuses, width, 0, selected, now, fetchInterval, palette)
+}
+
+func renderSnapshotSized(statuses []repositorySnapshot, width, height int, selected string, now time.Time, fetchInterval time.Duration, palette renderPalette) string {
 	if width <= 0 {
 		width = defaultRenderWidth
 	}
@@ -54,26 +58,60 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 		})
 	}
 
+	selectedIndex := -1
+	var details []string
+	if selected != "" {
+		for index, status := range ordered {
+			if status.Path == selected {
+				selectedIndex = index
+				details = renderDetails(status, width, now, fetchInterval, palette)
+				break
+			}
+		}
+	}
+	start, end := 0, len(ordered)
+	if height > 0 && len(ordered) > 0 {
+		fixedLines := 4
+		if len(details) > 0 && height >= len(details)+6 {
+			fixedLines += len(details) + 1
+		} else {
+			details = nil
+		}
+		start, end = selectedWindow(len(ordered), selectedIndex, max(1, height-fixedLines))
+	}
+
 	prefixWidth := 0
 	if selected != "" {
 		prefixWidth = displayWidth(palette.selection)
 	}
 	contentWidth := max(1, width-prefixWidth)
-	lines := renderTable(rows, ordered, contentWidth, width, selected, palette)
+	lines := renderTable(rows[start:end], ordered[start:end], contentWidth, width, selected, palette)
 	for index := range lines {
 		lines[index] = fitLine(lines[index], width)
 	}
 	lines = append(lines, "", fitLine(renderSummary(width, len(statuses), clean, dirty, ahead, behind, failures), width))
-	if selected != "" {
-		for _, status := range ordered {
-			if status.Path == selected {
-				lines = append(lines, "")
-				lines = append(lines, renderDetails(status, width, now, fetchInterval, palette)...)
-				break
-			}
-		}
+	if len(details) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, details...)
+	}
+	if height > 0 && len(lines) > height {
+		lines = lines[:height]
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func selectedWindow(length, selected, limit int) (int, int) {
+	if limit >= length {
+		return 0, length
+	}
+	if selected < 0 {
+		return 0, limit
+	}
+	start := max(0, selected-limit/2)
+	if start+limit > length {
+		start = length - limit
+	}
+	return start, start + limit
 }
 
 func renderTable(rows []renderRow, statuses []repositorySnapshot, width, layoutWidth int, selected string, palette renderPalette) []string {

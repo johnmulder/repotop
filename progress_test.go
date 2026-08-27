@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -106,6 +107,35 @@ func TestTerminalDashboardRepaintsOnChangeAndResizeByIdentity(t *testing.T) {
 	}
 	if err := dashboard.writeError(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTerminalDashboardMovesSelectionThroughViewport(t *testing.T) {
+	var output bytes.Buffer
+	dashboard := newSizedTerminalDashboard(&output, func() int { return 80 }, func() int { return 12 }, asciiPalette)
+	statuses := make([]repositorySnapshot, 20)
+	for index := range statuses {
+		statuses[index] = repositorySnapshot{repoStatus: repoStatus{
+			Path:        fmt.Sprintf("repo-%02d", index),
+			Branch:      "main",
+			HasUpstream: true,
+		}}
+	}
+	dashboard.publish(statuses)
+	dashboard.moveSelection(dashboard.pageSize())
+	if dashboard.selected != "repo-04" || !strings.Contains(dashboard.last, "> repo-04") {
+		t.Fatalf("page selection = %q\n%s", dashboard.selected, dashboard.last)
+	}
+	if lines := strings.Count(dashboard.last, "\n"); lines > 12 {
+		t.Fatalf("viewport uses %d lines:\n%s", lines, dashboard.last)
+	}
+	dashboard.moveSelection(100)
+	if dashboard.selected != "repo-19" || !strings.Contains(dashboard.last, "> repo-19") {
+		t.Fatalf("last selection = %q\n%s", dashboard.selected, dashboard.last)
+	}
+	dashboard.moveSelection(-100)
+	if dashboard.selected != "repo-00" {
+		t.Fatalf("first selection = %q", dashboard.selected)
 	}
 }
 

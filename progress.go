@@ -6,6 +6,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const snapshotInterval = 50 * time.Millisecond
@@ -46,6 +48,7 @@ type terminalDashboard struct {
 	mu       sync.Mutex
 	output   io.Writer
 	width    func() int
+	height   func() int
 	latest   []repositorySnapshot
 	selected string
 	last     string
@@ -55,25 +58,44 @@ type terminalDashboard struct {
 	palette  renderPalette
 }
 
-func terminalDashboardFor(output io.Writer, palette renderPalette) *terminalDashboard {
-	file, ok := output.(*os.File)
-	if !ok {
+func terminalDashboardFor(input io.Reader, output io.Writer, palette renderPalette) *terminalDashboard {
+	inputFile, inputOK := input.(*os.File)
+	outputFile, outputOK := output.(*os.File)
+	if !inputOK || !outputOK || !term.IsTerminal(int(inputFile.Fd())) || !term.IsTerminal(int(outputFile.Fd())) {
 		return nil
 	}
-	if _, ok := terminalWidth(file); !ok {
-		return nil
-	}
-	return newTerminalDashboard(output, func() int {
-		width, ok := terminalWidth(file)
-		if !ok {
-			return defaultRenderWidth
+	size := func() (int, int) {
+		width, height, err := term.GetSize(int(outputFile.Fd()))
+		if err != nil || width <= 0 {
+			width = defaultRenderWidth
 		}
+		return width, height
+	}
+	dashboard := newSizedTerminalDashboard(output, func() int {
+		width, _ := size()
 		return width
+	}, func() int {
+		_, height := size()
+		return height
 	}, palette)
+	return dashboard
+}
+
+func makeTerminalRaw(file *os.File) (func() error, error) {
+	state, err := term.MakeRaw(int(file.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return term.Restore(int(file.Fd()), state) }, nil
 }
 
 func newTerminalDashboard(output io.Writer, width func() int, palette renderPalette) *terminalDashboard {
-	return &terminalDashboard{output: output, width: width, now: time.Now, interval: defaultFetchInterval, palette: palette}
+	return newSizedTerminalDashboard(output, width, func() int { return 0 }, palette)
+
+}
+
+func newSizedTerminalDashboard(output io.Writer, width, height func() int, palette renderPalette) *terminalDashboard {
+	return &terminalDashboard{output: output, width: width, height: height, now: time.Now, interval: defaultFetchInterval, palette: palette}
 }
 
 func (dashboard *terminalDashboard) publish(statuses []repositorySnapshot) {
@@ -98,11 +120,40 @@ func (dashboard *terminalDashboard) redraw() {
 	dashboard.drawLocked()
 }
 
+func (dashboard *terminalDashboard) moveSelection(delta int) {
+	dashboard.mu.Lock()
+	defer dashboard.mu.Unlock()
+	ordered := slices.Clone(dashboard.latest)
+	sortSnapshots(ordered)
+	if len(ordered) == 0 {
+		return
+	}
+	index := 0
+	for candidate := range ordered {
+		if ordered[candidate].Path == dashboard.selected {
+			index = candidate
+			break
+		}
+	}
+	index = max(0, min(len(ordered)-1, index+delta))
+	dashboard.selected = ordered[index].Path
+	dashboard.drawLocked()
+}
+
+func (dashboard *terminalDashboard) pageSize() int {
+	dashboard.mu.Lock()
+	defer dashboard.mu.Unlock()
+	if height := dashboard.height(); height > 8 {
+		return height - 8
+	}
+	return 10
+}
+
 func (dashboard *terminalDashboard) drawLocked() {
 	if dashboard.err != nil {
 		return
 	}
-	view := renderSnapshot(dashboard.latest, dashboard.width(), dashboard.selected, dashboard.now(), dashboard.interval, dashboard.palette)
+	view := renderSnapshotSized(dashboard.latest, dashboard.width(), dashboard.height(), dashboard.selected, dashboard.now(), dashboard.interval, dashboard.palette)
 	if view == dashboard.last {
 		return
 	}

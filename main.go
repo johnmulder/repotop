@@ -9,9 +9,11 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 )
@@ -126,27 +128,66 @@ func run(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	var dashboard *terminalDashboard
 	if !*once {
-		dashboard = terminalDashboardFor(stdout, palette)
+		dashboard = terminalDashboardFor(os.Stdin, stdout, palette)
 	}
 	oneShot := dashboard == nil
-	var publish snapshotPublisher
 	if dashboard != nil {
-		publish = dashboard.publish
-		stopResize := watchTerminalResize(ctx, dashboard)
+		sessionCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+		restoreTerminal, err := makeTerminalRaw(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "repotop: terminal: %v\n", err)
+			return 1
+		}
+		restored := false
+		defer func() {
+			if !restored {
+				_ = restoreTerminal()
+			}
+		}()
+		stopResize := watchTerminalResize(sessionCtx, dashboard)
 		defer stopResize()
+		coordinator := newRepositoryCoordinator()
+		session := newInteractiveSession(absRoot, exclusions, repositories, coordinator, dashboard, stderr, !*noFetch)
+		requests := readSessionRequests(sessionCtx, os.Stdin)
+		if err := session.run(sessionCtx, requests); err != nil {
+			fmt.Fprintf(stderr, "repotop: session: %v\n", err)
+			return 1
+		}
+		if err := restoreTerminal(); err != nil {
+			fmt.Fprintf(stderr, "repotop: terminal restore: %v\n", err)
+			return 1
+		}
+		restored = true
+		statuses := coordinator.snapshot()
+		reportRepositoryWarnings(stderr, statuses)
+		if err := dashboard.writeError(); err != nil {
+			fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 	coordinator := newRepositoryCoordinator()
-	if err := refreshRepositories(ctx, coordinator, absRoot, repositories, inspectRepository, publish); err != nil {
+	if err := refreshRepositories(ctx, coordinator, absRoot, repositories, inspectRepository, nil); err != nil {
 		fmt.Fprintf(stderr, "repotop: inspect: %v\n", err)
 		return 1
 	}
 	if !*noFetch && (!oneShot || *forceFetch) {
-		if err := refreshRemotes(ctx, coordinator, absRoot, repositories, fetchRepository, inspectRepository, publish); err != nil {
+		if err := refreshRemotes(ctx, coordinator, absRoot, repositories, fetchRepository, inspectRepository, nil); err != nil {
 			fmt.Fprintf(stderr, "repotop: fetch: %v\n", err)
 			return 1
 		}
 	}
 	statuses := coordinator.snapshot()
+	reportRepositoryWarnings(stderr, statuses)
+	if err := render(stdout, statuses, palette); err != nil {
+		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func reportRepositoryWarnings(stderr io.Writer, statuses []repositorySnapshot) {
 	for _, status := range statuses {
 		if status.Error != "" {
 			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
@@ -156,17 +197,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(status.Path), status.Fetch.Error)
 	}
-	if dashboard != nil {
-		dashboard.publish(statuses)
-		if err := dashboard.writeError(); err != nil {
-			fmt.Fprintf(stderr, "repotop: render: %v\n", err)
-			return 1
-		}
-	} else if err := render(stdout, statuses, palette); err != nil {
-		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
-		return 1
-	}
-	return 0
 }
 
 func normalizeExclusion(value string) (string, error) {
