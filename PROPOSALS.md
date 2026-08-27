@@ -1,25 +1,6 @@
 # Proposals for `repotop`
 
-Proposals are ordered by priority. The review that produced this list found the existing one-pass implementation well tested and internally cohesive, so these entries focus on gaps that affect the product contract or make regressions harder to detect.
-
-## P0: Complete the continuous interactive dashboard lifecycle
-
-### Gap
-
-`IDEA.md` defines `repotop` as a continuously refreshing, keyboard-driven monitor with `q`, `r`, `f`, selection movement, a roughly two-second local refresh, and a slower remote refresh. The terminal path currently performs one discovery, one local inspection batch, one optional fetch batch, renders the result, and exits. Selection is always assigned automatically, so the selected-repository details cannot be reached for any other row.
-
-### Approach
-
-Add a terminal-only session loop around the existing discovery, inspection, fetch, coordinator, and renderer components. Keep redirected output and `--once` as finite snapshot modes. In an interactive terminal, refresh cached local status on a timer, rediscover on `r`, fetch on the remote timer or `f`, quit on `q`, and move the selected repository with arrow and page keys. Use the existing generation checks and snapshot publisher rather than introducing a second state model.
-
-### Implementation considerations
-
-- Accept or inject input, timers, and cancellation so the session loop can be tested without wall-clock sleeps.
-- Put the terminal into raw mode only when both input and output are terminals, and restore it on normal exit, signals, cancellation, and render errors.
-- Serialize coordinator ownership and avoid overlapping fetch batches; a stale local generation or late fetch must not overwrite newer state.
-- Preserve repository identity across sorting, rescans, removals, and selection movement.
-- Keep per-repository failures visible and nonfatal, and continue publishing progressive snapshots while work is running.
-- Add focused session-loop tests plus a small pseudo-terminal integration test for key decoding and terminal restoration.
+Proposals are ordered by priority. The review that produced this list found the implementation well tested and internally cohesive, so these entries focus on gaps that affect the product contract or make regressions harder to detect.
 
 ## P1: Distinguish unusable runs from repository-local errors
 
