@@ -7,7 +7,7 @@ Define one local command for every required project check and run that exact com
 ## Steps
 
 - [x] Verify `master` contains every completed plan, has no unmerged feature branches, and has no stale `PLAN.md`.
-- [ ] Add a minimal `make check` entry point covering format verification, `go vet`, uncached race-enabled tests, and build.
+- [x] Add a minimal `make check` entry point covering format verification, `go vet`, uncached race-enabled tests, and build.
 - [ ] Add a read-only GitHub Actions workflow that uses Go 1.24 from `go.mod` and calls `make check` on Linux and macOS.
 - [ ] Verify the local gate, individual targets, workflow structure, repeated tests, and failure behavior for unformatted source.
 - [ ] Remove this completed proposal from `PROPOSALS.md`, remove `PLAN.md`, commit the cleanup, merge the feature branch into `master`, and delete the feature branch.
