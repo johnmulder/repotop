@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. The review that produced this list found the implementation well tested and internally cohesive, so these entries focus on gaps that affect the product contract or make regressions harder to detect.
 
-## P1: Codify the quality gate in one repeatable command
-
-### Gap
-
-The repository has strong unit, integration, race, and source-hygiene tests, but no checked-in command or continuous-integration configuration defines the complete quality gate. Contributors must infer the required combination of formatting, vet, race testing, real-Git integration testing, and building. A locally omitted command can therefore allow a regression even though a suitable check already exists.
-
-### Approach
-
-Add one minimal development entry point, such as `make check`, that verifies formatting, runs `go vet`, executes the uncached race-enabled test suite, and builds the command. Have a small CI workflow call that same entry point on the supported Go version, with at least Linux coverage and a macOS portability check.
-
-### Implementation considerations
-
-- Keep the gate dependency-free beyond Go, Git, and standard shell tooling already required by the project.
-- Use Go 1.24 as the compatibility floor rather than silently testing only a newer local toolchain.
-- Ensure the real-Git tests receive deterministic author identity and never require network access.
-- Avoid a coverage percentage threshold until a specific risk justifies it; exercise behavior, not a number.
-- Keep the workflow small and make local and hosted commands identical to prevent CI-only behavior.
-
 ## P2: Make terminal width and truncation grapheme-aware
 
 ### Gap
