@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. They are grounded in the difference between the current implementation and the direction in `IDEA.md`; speculative repository-management features remain out of scope.
 
-## P2: Add a machine-readable finite snapshot
-
-### Gap
-
-Redirected output is deterministic but still a width-dependent human table. Scripts cannot reliably consume repository, worktree, upstream, freshness, and error state without parsing presentation text. `IDEA.md` identifies JSON or line-oriented output as a possible future feature, and the existing normalized snapshot model already contains the necessary data.
-
-### Approach
-
-Add a `--json` option that selects finite mode and writes one JSON document using the standard library. Serialize an explicit public response shape rather than the renderer's internal structs, while reusing the existing discovery, optional fetch, warning, and exit-status pipeline.
-
-### Implementation considerations
-
-- Emit exactly one JSON value on standard output and keep diagnostics on standard error.
-- Preserve the meanings of `--fetch`, `--no-fetch`, exclusions, partial repository failures, and exit statuses.
-- Use stable field names, RFC 3339 timestamps, and explicit empty or unavailable states.
-- Escape repository-controlled strings through `encoding/json`; never include ANSI or display glyphs.
-- Start with one document; defer NDJSON, streaming, and schema negotiation until a concrete consumer needs them.
-
 ## P2: Make the remote refresh interval configurable
 
 ### Gap
