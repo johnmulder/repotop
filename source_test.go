@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -8,6 +9,27 @@ import (
 	"testing"
 	"unicode"
 )
+
+func TestREADMEListsEveryShippedOption(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, help bytes.Buffer
+	if code := run([]string{"--help"}, &stdout, &help); code != 0 {
+		t.Fatalf("help exit = %d: %s", code, help.String())
+	}
+	for _, line := range strings.Split(help.String(), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || !strings.HasPrefix(fields[0], "-") {
+			continue
+		}
+		option := "-" + fields[0]
+		if !bytes.Contains(readme, []byte("`"+option)) {
+			t.Errorf("README does not document %s", option)
+		}
+	}
+}
 
 func TestNonASCIISourceIsReviewed(t *testing.T) {
 	reviewed := map[string]string{
