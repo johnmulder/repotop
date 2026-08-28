@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. The review that produced this list found the implementation well tested and internally cohesive, so these entries focus on gaps that affect the product contract or make regressions harder to detect.
 
-## P1: Distinguish unusable runs from repository-local errors
-
-### Gap
-
-Recoverable repository failures are correctly represented as row data, but systemic failures can currently look successful. If `git` is unavailable, every discovered repository becomes an error row and the process still exits zero. A root that cannot be traversed can likewise emit a warning followed by `no Git repositories found` and a successful exit. This makes `--once` unreliable for scripts because a complete inability to inspect the requested tree is indistinguishable from a valid result.
-
-### Approach
-
-Define a small run-outcome policy that separates repository-local data errors from failures that prevent any trustworthy scan. Validate the required `git` executable once when at least one repository is found, distinguish a root traversal failure from skipped descendant failures, and return a nonzero execution status when no useful result can be produced. Continue returning zero for dirty, ahead, behind, fetch-failed, or individually broken repositories.
-
-### Implementation considerations
-
-- Preserve typed failure information long enough to classify infrastructure failures without matching diagnostic strings.
-- Report one concise systemic diagnostic instead of repeating the same warning for every repository.
-- Do not require `git` merely to report that an empty tree contains no repositories.
-- Keep descendant permission errors and isolated malformed repositories as partial-result warnings.
-- Document and test exit codes for missing Git, unreadable roots, partial scans, all-local-inspection failure, and ordinary repository states.
-
 ## P1: Codify the quality gate in one repeatable command
 
 ### Gap
