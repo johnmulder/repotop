@@ -110,7 +110,7 @@ Options should be kept deliberately small. Reasonable candidates are:
 ```text
 repotop [directory]
 repotop --no-fetch [directory]
-repotop --fetch-interval SECONDS [directory]
+repotop --fetch-interval DURATION [directory]
 repotop --help
 repotop --version
 ```

@@ -45,7 +45,10 @@ func TestInteractiveSessionSerializesAndCoalescesRefreshes(t *testing.T) {
 	coordinator := newRepositoryCoordinator()
 	var output, stderr bytes.Buffer
 	dashboard := newSizedTerminalDashboard(&output, func() int { return 80 }, func() int { return 24 }, asciiPalette)
-	session := newInteractiveSession("/root", nil, []string{repository}, coordinator, dashboard, &stderr, true)
+	session := newInteractiveSession("/root", nil, []string{repository}, coordinator, dashboard, &stderr, true, 7*time.Second)
+	if session.fetchInterval != 7*time.Second {
+		t.Fatalf("fetch interval = %s", session.fetchInterval)
+	}
 
 	var discoveries, fetches atomic.Int32
 	fetchStarted := make(chan struct{}, 1)
@@ -125,7 +128,7 @@ func waitForSessionInputs(t *testing.T, requests chan sessionRequest, localTicks
 func TestInteractiveSessionNoFetchPolicy(t *testing.T) {
 	coordinator := newRepositoryCoordinator()
 	dashboard := newTerminalDashboard(&bytes.Buffer{}, func() int { return 80 }, asciiPalette)
-	session := newInteractiveSession("/root", nil, []string{"/root/a"}, coordinator, dashboard, &bytes.Buffer{}, false)
+	session := newInteractiveSession("/root", nil, []string{"/root/a"}, coordinator, dashboard, &bytes.Buffer{}, false, defaultFetchInterval)
 	session.inspect = func(context.Context, string, string) repoStatus {
 		return repoStatus{Path: "a", Branch: "main", HasRemote: true, HasUpstream: true}
 	}
@@ -151,7 +154,7 @@ func TestInteractiveSessionNoFetchPolicy(t *testing.T) {
 func TestInteractiveSessionKeepsRepositoryFailuresNonfatal(t *testing.T) {
 	coordinator := newRepositoryCoordinator()
 	dashboard := newTerminalDashboard(&bytes.Buffer{}, func() int { return 80 }, asciiPalette)
-	session := newInteractiveSession("/root", nil, []string{"/root/broken"}, coordinator, dashboard, &bytes.Buffer{}, false)
+	session := newInteractiveSession("/root", nil, []string{"/root/broken"}, coordinator, dashboard, &bytes.Buffer{}, false, defaultFetchInterval)
 	session.inspect = func(context.Context, string, string) repoStatus {
 		return repoStatus{Path: "broken", Error: "malformed repository"}
 	}

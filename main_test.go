@@ -269,7 +269,7 @@ func TestRender(t *testing.T) {
 		{Path: "clean", Branch: "main", HasUpstream: true},
 	}
 	var output bytes.Buffer
-	if err := render(&output, snapshotsOf(statuses...), asciiPalette); err != nil {
+	if err := render(&output, snapshotsOf(statuses...), defaultFetchInterval, asciiPalette); err != nil {
 		t.Fatal(err)
 	}
 	want := "REPOSITORY                        BRANCH            WORKTREE      REMOTE\n" +
@@ -349,7 +349,7 @@ func TestRenderTruncatesWithinWidthAndKeepsSelectionIdentity(t *testing.T) {
 
 func TestRenderSingularSummary(t *testing.T) {
 	var output bytes.Buffer
-	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"}), asciiPalette); err != nil {
+	if err := render(&output, snapshotsOf(repoStatus{Path: ".", Error: "broken"}), defaultFetchInterval, asciiPalette); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "1 repo (0 clean, 0 dirty, 0 ahead, 0 behind, 1 error)") {
@@ -566,6 +566,20 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	}
 }
 
+func TestRunRejectsInvalidFetchIntervals(t *testing.T) {
+	for _, interval := range []string{"0s", "-1s", "invalid"} {
+		t.Run(interval, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"--fetch-interval=" + interval}, &stdout, &stderr); code != 2 {
+				t.Fatalf("invalid interval exit = %d, stderr = %q", code, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "fetch-interval") {
+				t.Fatalf("invalid interval diagnostic = %q", stderr.String())
+			}
+		})
+	}
+}
+
 func TestRunOneShotFetchPolicy(t *testing.T) {
 	installFakeGit(t)
 	t.Setenv("FAKE_GIT_MODE", "run")
@@ -586,6 +600,15 @@ func TestRunOneShotFetchPolicy(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("default one-shot wrote scan statistics: %q", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--fetch-interval", "15s", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("configured one-shot exit = %d, stderr = %q", code, stderr.String())
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("configured one-shot fetched: %v", err)
 	}
 
 	stdout.Reset()

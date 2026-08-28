@@ -63,6 +63,17 @@ func TestRenderJSONContractAndEscaping(t *testing.T) {
 		t.Fatalf("empty JSON output = %q", output.String())
 	}
 
+	output.Reset()
+	status.Error = ""
+	status.Fetching = false
+	status.Fetch.Error = ""
+	if err := renderJSON(&output, "/root", []repositorySnapshot{status}, now, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if got := decodeJSONDocument(t, output.Bytes()).Repositories[0].RemoteState; got != "stale" {
+		t.Fatalf("configured freshness state = %q, want stale", got)
+	}
+
 	wantErr := errors.New("write failed")
 	if err := renderJSON(failingJSONWriter{err: wantErr}, "/root", nil, now, defaultFetchInterval); !errors.Is(err, wantErr) {
 		t.Fatalf("render error = %v, want %v", err, wantErr)
@@ -78,7 +89,7 @@ func TestRunJSONSnapshotAndFetchPolicy(t *testing.T) {
 	mustMkdir(t, filepath.Join(root, ".git"))
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--ascii", "--json", root}, &stdout, &stderr); code != 0 {
+	if code := run([]string{"--ascii", "--json", "--fetch-interval", "15s", root}, &stdout, &stderr); code != 0 {
 		t.Fatalf("cached JSON exit = %d, stderr = %q", code, stderr.String())
 	}
 	document := decodeJSONDocument(t, stdout.Bytes())

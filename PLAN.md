@@ -6,16 +6,16 @@ Add a positive `--fetch-interval DURATION` option that changes the interactive r
 
 ## Implementation
 
-- [ ] Parse the option with Go's duration flag support and reject zero or negative values as command-line usage errors.
-- [ ] Pass the selected interval to the interactive session ticker, terminal dashboard, finite text renderer, and JSON freshness renderer.
-- [ ] Preserve `--no-fetch` as the only way to disable remote fetching and preserve `--fetch` as finite mode's explicit fetch opt-in.
-- [ ] Add focused tests for parsing, validation, propagation, freshness behavior, and unchanged finite fetch behavior without wall-clock sleeps.
-- [ ] Document the option, its accepted duration syntax, its interactive scheduling behavior, and its finite-mode freshness-only effect.
+- [x] Parse the option with Go's duration flag support and reject zero or negative values as command-line usage errors.
+- [x] Pass the selected interval to the interactive session ticker, terminal dashboard, finite text renderer, and JSON freshness renderer.
+- [x] Preserve `--no-fetch` as the only way to disable remote fetching and preserve `--fetch` as finite mode's explicit fetch opt-in.
+- [x] Add focused tests for parsing, validation, propagation, freshness behavior, and unchanged finite fetch behavior without wall-clock sleeps.
+- [x] Document the option, its accepted duration syntax, its interactive scheduling behavior, and its finite-mode freshness-only effect.
 
 ## Verification
 
-- [ ] Run focused option, session, renderer, JSON, and documentation tests.
-- [ ] Run `make check` and repeat/shuffle tests.
+- [x] Run focused option, session, renderer, JSON, and documentation tests.
+- [x] Run `make check` and repeat/shuffle tests.
 - [ ] Run Git whitespace and merge-tree checks.
 
 ## Completion

@@ -59,7 +59,7 @@ type terminalDashboard struct {
 	style    terminalStyle
 }
 
-func terminalDashboardFor(input io.Reader, output io.Writer, palette renderPalette) *terminalDashboard {
+func terminalDashboardFor(input io.Reader, output io.Writer, fetchInterval time.Duration, palette renderPalette) *terminalDashboard {
 	inputFile, inputOK := input.(*os.File)
 	outputFile, outputOK := output.(*os.File)
 	if !inputOK || !outputOK || !term.IsTerminal(int(inputFile.Fd())) || !term.IsTerminal(int(outputFile.Fd())) {
@@ -79,6 +79,7 @@ func terminalDashboardFor(input io.Reader, output io.Writer, palette renderPalet
 		_, height := size()
 		return height
 	}, palette)
+	dashboard.interval = fetchInterval
 	dashboard.style = selectTerminalStyle(os.LookupEnv)
 	return dashboard
 }

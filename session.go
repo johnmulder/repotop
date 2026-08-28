@@ -40,16 +40,17 @@ type sessionTaskResult struct {
 }
 
 type interactiveSession struct {
-	root         string
-	exclusions   map[string]struct{}
-	repositories []string
-	coordinator  *repositoryCoordinator
-	dashboard    *terminalDashboard
-	stderr       io.Writer
-	allowFetch   bool
-	discover     func(context.Context, string, map[string]struct{}) ([]string, []error, error)
-	inspect      func(context.Context, string, string) repoStatus
-	fetch        func(context.Context, string) error
+	root          string
+	exclusions    map[string]struct{}
+	repositories  []string
+	coordinator   *repositoryCoordinator
+	dashboard     *terminalDashboard
+	stderr        io.Writer
+	allowFetch    bool
+	fetchInterval time.Duration
+	discover      func(context.Context, string, map[string]struct{}) ([]string, []error, error)
+	inspect       func(context.Context, string, string) repoStatus
+	fetch         func(context.Context, string) error
 }
 
 func newInteractiveSession(
@@ -60,18 +61,20 @@ func newInteractiveSession(
 	dashboard *terminalDashboard,
 	stderr io.Writer,
 	allowFetch bool,
+	fetchInterval time.Duration,
 ) *interactiveSession {
 	return &interactiveSession{
-		root:         root,
-		exclusions:   exclusions,
-		repositories: slices.Clone(repositories),
-		coordinator:  coordinator,
-		dashboard:    dashboard,
-		stderr:       stderr,
-		allowFetch:   allowFetch,
-		discover:     discover,
-		inspect:      inspectRepository,
-		fetch:        fetchRepository,
+		root:          root,
+		exclusions:    exclusions,
+		repositories:  slices.Clone(repositories),
+		coordinator:   coordinator,
+		dashboard:     dashboard,
+		stderr:        stderr,
+		allowFetch:    allowFetch,
+		fetchInterval: fetchInterval,
+		discover:      discover,
+		inspect:       inspectRepository,
+		fetch:         fetchRepository,
 	}
 }
 
@@ -81,7 +84,7 @@ func (session *interactiveSession) run(ctx context.Context, requests <-chan sess
 	var remoteTicks *time.Ticker
 	var remoteTick <-chan time.Time
 	if session.allowFetch {
-		remoteTicks = time.NewTicker(defaultFetchInterval)
+		remoteTicks = time.NewTicker(session.fetchInterval)
 		remoteTick = remoteTicks.C
 		defer remoteTicks.Stop()
 	}

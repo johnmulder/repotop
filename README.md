@@ -36,24 +36,26 @@ The directory defaults to the current directory.
 | `--ascii` | Use plain ASCII application symbols. Repository names remain Unicode. |
 | `--exclude PATH` | Skip an existing root-relative directory and its subtree. Repeat for more exclusions. |
 | `--fetch` | Fetch remotes before a finite snapshot. Interactive mode already refreshes remotes by default. |
+| `--fetch-interval DURATION` | Set the interactive remote-refresh schedule and freshness threshold. |
 | `--json` | Write one machine-readable finite snapshot. |
 | `--no-fetch` | Disable automatic and manual remote fetches. |
 | `--once` | Render one final snapshot, even when attached to a terminal. |
 | `--scan-stats` | Write discovery duration and counts to standard error. |
 
-`--fetch` and `--no-fetch` are mutually exclusive. Exclusions cannot be absolute, missing, ordinary files, or paths outside the scan root.
+`--fetch` and `--no-fetch` are mutually exclusive. `--fetch-interval` accepts a positive Go duration such as `30s`, `5m`, or `1h`. Exclusions cannot be absolute, missing, ordinary files, or paths outside the scan root.
 
 Examples:
 
 ```sh
 repotop ~/src
 repotop --no-fetch --exclude vendor ~/src
+repotop --fetch-interval 30s ~/src
 repotop --ascii --once --fetch ~/src
 ```
 
 ## Output modes and refresh policy
 
-In a supported terminal, `repotop` shows local results as they arrive, refreshes local state every two seconds, and refreshes remotes every three minutes. The initial remote refresh starts after local inspection. Available keys are:
+In a supported terminal, `repotop` shows local results as they arrive, refreshes local state every two seconds, and refreshes remotes every three minutes by default. The initial remote refresh starts after local inspection. `--fetch-interval` changes the remote schedule and the threshold after which prior remote data is shown as stale. Available keys are:
 
 | Key | Action |
 | --- | --- |
@@ -63,7 +65,7 @@ In a supported terminal, `repotop` shows local results as they arrive, refreshes
 | Up/Down | Move the selected repository. |
 | Page Up/Page Down | Move by one visible page. |
 
-Redirected output and `--once` produce one final snapshot without terminal control sequences. Finite output uses cached remote-tracking refs by default; add `--fetch` to refresh them first.
+Redirected output and `--once` produce one final snapshot without terminal control sequences. Finite output uses cached remote-tracking refs by default; add `--fetch` to refresh them first. In finite mode, `--fetch-interval` changes only the freshness threshold and never triggers a fetch by itself.
 
 `--json` also selects finite mode and writes exactly one object. The top level contains the absolute `root` and a `repositories` array. Repository records contain the path and branch, dirty state and worktree counts, ahead/behind and remote availability, `remote_state`, fetch timestamps and duration, and local or fetch errors. Missing timestamps are empty strings; present timestamps are UTC RFC 3339 values. Diagnostics remain on standard error, and `--fetch` retains its normal opt-in behavior.
 

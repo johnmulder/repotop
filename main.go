@@ -58,6 +58,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return nil
 	})
 	forceFetch := flags.Bool("fetch", false, "fetch remotes before rendering")
+	fetchInterval := flags.Duration("fetch-interval", defaultFetchInterval, "refresh remotes after this duration")
 	jsonOutput := flags.Bool("json", false, "write one JSON snapshot")
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 	once := flags.Bool("once", false, "render one final snapshot")
@@ -76,6 +77,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if *forceFetch && *noFetch {
 		fmt.Fprintln(stderr, "repotop: --fetch and --no-fetch are mutually exclusive")
+		flags.Usage()
+		return 2
+	}
+	if *fetchInterval <= 0 {
+		fmt.Fprintln(stderr, "repotop: --fetch-interval must be positive")
 		flags.Usage()
 		return 2
 	}
@@ -123,7 +129,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(repositories) == 0 {
 		if *jsonOutput {
-			if err := renderJSON(stdout, absRoot, nil, time.Now(), defaultFetchInterval); err != nil {
+			if err := renderJSON(stdout, absRoot, nil, time.Now(), *fetchInterval); err != nil {
 				fmt.Fprintf(stderr, "repotop: render: %v\n", err)
 				return 1
 			}
@@ -141,7 +147,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	var dashboard *terminalDashboard
 	if !*once && !*jsonOutput {
-		dashboard = terminalDashboardFor(os.Stdin, stdout, palette)
+		dashboard = terminalDashboardFor(os.Stdin, stdout, *fetchInterval, palette)
 	}
 	oneShot := dashboard == nil
 	if dashboard != nil {
@@ -161,7 +167,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		stopResize := watchTerminalResize(sessionCtx, dashboard)
 		defer stopResize()
 		coordinator := newRepositoryCoordinator()
-		session := newInteractiveSession(absRoot, exclusions, repositories, coordinator, dashboard, stderr, !*noFetch)
+		session := newInteractiveSession(absRoot, exclusions, repositories, coordinator, dashboard, stderr, !*noFetch, *fetchInterval)
 		requests := readSessionRequests(sessionCtx, os.Stdin)
 		if err := session.run(sessionCtx, requests); err != nil {
 			fmt.Fprintf(stderr, "repotop: session: %v\n", err)
@@ -195,9 +201,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	usable := reportRepositoryWarnings(stderr, statuses)
 	var renderErr error
 	if *jsonOutput {
-		renderErr = renderJSON(stdout, absRoot, statuses, time.Now(), defaultFetchInterval)
+		renderErr = renderJSON(stdout, absRoot, statuses, time.Now(), *fetchInterval)
 	} else {
-		renderErr = render(stdout, statuses, palette)
+		renderErr = render(stdout, statuses, *fetchInterval, palette)
 	}
 	if renderErr != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", renderErr)
@@ -464,8 +470,8 @@ func severity(status repoStatus) int {
 	}
 }
 
-func render(output io.Writer, statuses []repositorySnapshot, palette renderPalette) error {
-	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, "", time.Now(), defaultFetchInterval, palette))
+func render(output io.Writer, statuses []repositorySnapshot, fetchInterval time.Duration, palette renderPalette) error {
+	_, err := io.WriteString(output, renderSnapshot(statuses, defaultRenderWidth, "", time.Now(), fetchInterval, palette))
 	return err
 }
 
