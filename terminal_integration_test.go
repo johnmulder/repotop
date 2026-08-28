@@ -4,9 +4,11 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"reflect"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -14,6 +16,42 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
+
+func TestJSONTerminalProducesFiniteOutput(t *testing.T) {
+	requireRealGit(t)
+	repository := newRealRepository(t)
+	command := exec.Command(os.Args[0], "-test.run=^TestInteractiveTerminalHelper$")
+	command.Env = append(os.Environ(), "REPOTOP_PTY_HELPER=1", "REPOTOP_PTY_ROOT="+repository, "REPOTOP_PTY_JSON=1")
+	terminal, err := pty.Start(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer terminal.Close()
+
+	var output bytes.Buffer
+	readDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&output, terminal)
+		close(readDone)
+	}()
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- command.Wait() }()
+	select {
+	case err := <-waitDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		_ = command.Process.Kill()
+		<-waitDone
+		t.Fatal("JSON terminal mode did not exit without input")
+	}
+	_ = terminal.Close()
+	<-readDone
+	if !strings.Contains(output.String(), `"repositories"`) || strings.Contains(output.String(), "REPOSITORY") || strings.Contains(output.String(), "\x1b[") {
+		t.Fatalf("terminal JSON output = %q", output.String())
+	}
+}
 
 func TestInteractiveTerminalRestoresState(t *testing.T) {
 	stops := []struct {
@@ -124,7 +162,11 @@ func TestInteractiveTerminalHelper(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if code := run([]string{"--ascii", "--no-fetch", os.Getenv("REPOTOP_PTY_ROOT")}, os.Stdout, os.Stderr); code != 0 {
+	args := []string{"--ascii", "--no-fetch", os.Getenv("REPOTOP_PTY_ROOT")}
+	if os.Getenv("REPOTOP_PTY_JSON") == "1" {
+		args = append([]string{"--json"}, args...)
+	}
+	if code := run(args, os.Stdout, os.Stderr); code != 0 {
 		t.Fatalf("interactive run exit = %d", code)
 	}
 }

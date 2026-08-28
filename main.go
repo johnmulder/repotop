@@ -58,6 +58,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return nil
 	})
 	forceFetch := flags.Bool("fetch", false, "fetch remotes before rendering")
+	jsonOutput := flags.Bool("json", false, "write one JSON snapshot")
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 	once := flags.Bool("once", false, "render one final snapshot")
 	scanStats := flags.Bool("scan-stats", false, "report discovery timing and counts")
@@ -121,7 +122,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "warning: %s\n", oneLine(scanErr.Error()))
 	}
 	if len(repositories) == 0 {
-		fmt.Fprintf(stdout, "no Git repositories found beneath %s\n", safeCell(absRoot))
+		if *jsonOutput {
+			if err := renderJSON(stdout, absRoot, nil, time.Now(), defaultFetchInterval); err != nil {
+				fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+				return 1
+			}
+		} else {
+			fmt.Fprintf(stdout, "no Git repositories found beneath %s\n", safeCell(absRoot))
+		}
 		return 0
 	}
 	if err := checkGitExecutable(); err != nil {
@@ -132,7 +140,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var dashboard *terminalDashboard
-	if !*once {
+	if !*once && !*jsonOutput {
 		dashboard = terminalDashboardFor(os.Stdin, stdout, palette)
 	}
 	oneShot := dashboard == nil
@@ -185,8 +193,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	statuses := coordinator.snapshot()
 	usable := reportRepositoryWarnings(stderr, statuses)
-	if err := render(stdout, statuses, palette); err != nil {
-		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+	var renderErr error
+	if *jsonOutput {
+		renderErr = renderJSON(stdout, absRoot, statuses, time.Now(), defaultFetchInterval)
+	} else {
+		renderErr = render(stdout, statuses, palette)
+	}
+	if renderErr != nil {
+		fmt.Fprintf(stderr, "repotop: render: %v\n", renderErr)
 		return 1
 	}
 	if !usable {

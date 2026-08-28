@@ -460,7 +460,6 @@ Only consider these after the basic tool has proven useful:
 
 - filtering/search
 - alternate sort order
-- JSON or line-oriented noninteractive output
 - fetch only selected repository
 - optional recognition of bare repositories
 - shell command to print the selected repository path
