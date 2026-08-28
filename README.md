@@ -64,6 +64,8 @@ In a supported terminal, `repotop` shows local results as they arrive, refreshes
 
 Redirected output and `--once` produce one final snapshot without terminal control sequences. Finite output uses cached remote-tracking refs by default; add `--fetch` to refresh them first.
 
+Interactive repository rows use green for clean/current state, yellow for attention states such as dirty, ahead, fetching, or stale, red for behind or error state, and dim text for missing remote configuration. Text markers remain authoritative. Color is disabled when `NO_COLOR` is present, when `TERM=dumb`, and for all finite output. `--ascii` changes glyphs independently and does not disable color.
+
 ## Reading the display
 
 A plain-ASCII snapshot looks like this:

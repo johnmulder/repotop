@@ -27,6 +27,10 @@ func renderSnapshot(statuses []repositorySnapshot, width int, selected string, n
 }
 
 func renderSnapshotSized(statuses []repositorySnapshot, width, height int, selected string, now time.Time, fetchInterval time.Duration, palette renderPalette) string {
+	return renderStyledSnapshotSized(statuses, width, height, selected, now, fetchInterval, palette, terminalStyle{})
+}
+
+func renderStyledSnapshotSized(statuses []repositorySnapshot, width, height int, selected string, now time.Time, fetchInterval time.Duration, palette renderPalette, style terminalStyle) string {
 	if width <= 0 {
 		width = defaultRenderWidth
 	}
@@ -88,6 +92,9 @@ func renderSnapshotSized(statuses []repositorySnapshot, width, height int, selec
 	lines := renderTable(rows[start:end], ordered[start:end], contentWidth, width, selected, palette)
 	for index := range lines {
 		lines[index] = fitLine(lines[index], width)
+	}
+	for index, status := range ordered[start:end] {
+		lines[index+2] = style.apply(status, now, fetchInterval, lines[index+2])
 	}
 	lines = append(lines, "", fitLine(renderSummary(width, len(statuses), clean, dirty, ahead, behind, failures), width))
 	if len(details) > 0 {

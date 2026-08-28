@@ -57,7 +57,7 @@ func assertInteractiveTerminalRestores(t *testing.T, stop func(*exec.Cmd, *os.Fi
 	}
 
 	command := exec.Command(os.Args[0], "-test.run=^TestInteractiveTerminalHelper$")
-	command.Env = append(os.Environ(), "REPOTOP_PTY_HELPER=1", "REPOTOP_PTY_ROOT="+repository)
+	command.Env = append(os.Environ(), "REPOTOP_PTY_HELPER=1", "REPOTOP_PTY_ROOT="+repository, "REPOTOP_PTY_COLOR=1")
 	command.Stdin, command.Stdout, command.Stderr = secondary, secondary, secondary
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func assertInteractiveTerminalRestores(t *testing.T, stop func(*exec.Cmd, *os.Fi
 		for {
 			count, err := primary.Read(buffer)
 			output.Write(buffer[:count])
-			if bytes.Contains(output.Bytes(), []byte("REPOSITORY")) {
+			if bytes.Contains(output.Bytes(), []byte("REPOSITORY")) && bytes.Contains(output.Bytes(), []byte(ansiTerminalStyle.muted)) {
 				select {
 				case seenDashboard <- struct{}{}:
 				default:
@@ -115,6 +115,14 @@ func assertInteractiveTerminalRestores(t *testing.T, stop func(*exec.Cmd, *os.Fi
 func TestInteractiveTerminalHelper(t *testing.T) {
 	if os.Getenv("REPOTOP_PTY_HELPER") != "1" {
 		return
+	}
+	if os.Getenv("REPOTOP_PTY_COLOR") == "1" {
+		if err := os.Unsetenv("NO_COLOR"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Setenv("TERM", "xterm-256color"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if code := run([]string{"--ascii", "--no-fetch", os.Getenv("REPOTOP_PTY_ROOT")}, os.Stdout, os.Stderr); code != 0 {
 		t.Fatalf("interactive run exit = %d", code)

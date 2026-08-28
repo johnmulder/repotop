@@ -32,6 +32,86 @@ func TestPaletteSelectionUsesEffectiveLocaleAndOverride(t *testing.T) {
 	}
 }
 
+func TestTerminalStyleSelection(t *testing.T) {
+	tests := []struct {
+		name        string
+		environment map[string]string
+		want        terminalStyle
+	}{
+		{name: "terminal default", environment: map[string]string{}, want: ansiTerminalStyle},
+		{name: "NO_COLOR present", environment: map[string]string{"NO_COLOR": ""}, want: terminalStyle{}},
+		{name: "dumb terminal", environment: map[string]string{"TERM": " DUMB "}, want: terminalStyle{}},
+		{name: "usable terminal", environment: map[string]string{"TERM": "xterm-256color"}, want: ansiTerminalStyle},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lookupEnv := func(name string) (string, bool) {
+				value, ok := test.environment[name]
+				return value, ok
+			}
+			if got := selectTerminalStyle(lookupEnv); got != test.want {
+				t.Fatalf("style = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestTerminalStyleIsSemanticAndLayoutNeutral(t *testing.T) {
+	now := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
+	comparable := repoStatus{Path: "repo", Branch: "main", HasRemote: true, HasUpstream: true}
+	tests := []struct {
+		name     string
+		snapshot repositorySnapshot
+		code     string
+	}{
+		{name: "local error", snapshot: repositorySnapshot{repoStatus: repoStatus{Error: "broken"}}, code: ansiTerminalStyle.danger},
+		{name: "fetch error", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{Error: "offline"}}, code: ansiTerminalStyle.danger},
+		{name: "behind wins over dirty", snapshot: repositorySnapshot{repoStatus: repoStatus{Behind: 1, Changed: 1, HasRemote: true, HasUpstream: true}}, code: ansiTerminalStyle.danger},
+		{name: "dirty wins over missing", snapshot: repositorySnapshot{repoStatus: repoStatus{Changed: 1}}, code: ansiTerminalStyle.attention},
+		{name: "ahead", snapshot: repositorySnapshot{repoStatus: repoStatus{Ahead: 1, HasRemote: true, HasUpstream: true}}, code: ansiTerminalStyle.attention},
+		{name: "fetching", snapshot: repositorySnapshot{repoStatus: comparable, Fetching: true}, code: ansiTerminalStyle.attention},
+		{name: "stale", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{LastSuccess: now.Add(-4 * time.Minute)}}, code: ansiTerminalStyle.attention},
+		{name: "missing remote", snapshot: repositorySnapshot{repoStatus: repoStatus{}}, code: ansiTerminalStyle.muted},
+		{name: "missing upstream", snapshot: repositorySnapshot{repoStatus: repoStatus{HasRemote: true}}, code: ansiTerminalStyle.muted},
+		{name: "current", snapshot: repositorySnapshot{repoStatus: comparable, Fetch: fetchStatus{LastSuccess: now}}, code: ansiTerminalStyle.clean},
+		{name: "cached", snapshot: repositorySnapshot{repoStatus: comparable}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want := "row"
+			if test.code != "" {
+				want = test.code + want + ansiTerminalStyle.reset
+			}
+			if got := ansiTerminalStyle.apply(test.snapshot, now, defaultFetchInterval, "row"); got != want {
+				t.Fatalf("styled row = %q, want %q", got, want)
+			}
+		})
+	}
+
+	status := repositorySnapshot{repoStatus: repoStatus{
+		Path:        "repo\x1b[31m",
+		Branch:      "main",
+		Ahead:       1,
+		HasRemote:   true,
+		HasUpstream: true,
+	}}
+	plain := renderSnapshotSized([]repositorySnapshot{status}, 80, 0, "", now, defaultFetchInterval, asciiPalette)
+	colored := renderStyledSnapshotSized([]repositorySnapshot{status}, 80, 0, "", now, defaultFetchInterval, asciiPalette, ansiTerminalStyle)
+	stripped := strings.NewReplacer(
+		ansiTerminalStyle.clean, "",
+		ansiTerminalStyle.attention, "",
+		ansiTerminalStyle.danger, "",
+		ansiTerminalStyle.muted, "",
+		ansiTerminalStyle.reset, "",
+	).Replace(colored)
+	if stripped != plain {
+		t.Fatalf("stripped colored output changed layout:\n%q\nwant:\n%q", stripped, plain)
+	}
+	if strings.Count(colored, "\x1b[") != 2 || !strings.Contains(colored, ansiTerminalStyle.attention+"repo?[31m") {
+		t.Fatalf("unexpected ANSI or unsanitized path: %q", colored)
+	}
+}
+
 func TestUnicodePaletteUsesReviewedGlyphsWithoutLosingText(t *testing.T) {
 	now := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 	statuses := []repositorySnapshot{

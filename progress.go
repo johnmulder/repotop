@@ -56,6 +56,7 @@ type terminalDashboard struct {
 	now      func() time.Time
 	interval time.Duration
 	palette  renderPalette
+	style    terminalStyle
 }
 
 func terminalDashboardFor(input io.Reader, output io.Writer, palette renderPalette) *terminalDashboard {
@@ -78,6 +79,7 @@ func terminalDashboardFor(input io.Reader, output io.Writer, palette renderPalet
 		_, height := size()
 		return height
 	}, palette)
+	dashboard.style = selectTerminalStyle(os.LookupEnv)
 	return dashboard
 }
 
@@ -153,7 +155,7 @@ func (dashboard *terminalDashboard) drawLocked() {
 	if dashboard.err != nil {
 		return
 	}
-	view := renderSnapshotSized(dashboard.latest, dashboard.width(), dashboard.height(), dashboard.selected, dashboard.now(), dashboard.interval, dashboard.palette)
+	view := renderStyledSnapshotSized(dashboard.latest, dashboard.width(), dashboard.height(), dashboard.selected, dashboard.now(), dashboard.interval, dashboard.palette, dashboard.style)
 	if view == dashboard.last {
 		return
 	}

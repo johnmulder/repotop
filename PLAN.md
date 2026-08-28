@@ -7,10 +7,10 @@ Add optional semantic ANSI color to interactive repository rows without changing
 ## Steps
 
 - [x] Preserve the reviewed proposal catalogue, verify `master` contains every completed plan, and confirm there are no stale plans, unmerged completed branches, or extra worktrees.
-- [ ] Define dependency-free green, yellow, red, and dim row styles with deterministic status priority.
-- [ ] Apply styles only after plain-text layout and enable them only for a usable interactive terminal when `NO_COLOR` is absent and `TERM` is not `dumb`.
-- [ ] Add focused tests for style selection, semantic priority, ASCII independence, exact plain-text equivalence after stripping ANSI, and repository-controlled control characters.
-- [ ] Document interactive color behavior and run focused tests, source hygiene, formatting, vet, uncached race tests, repeated shuffled tests, build, and the complete quality gate.
+- [x] Define dependency-free green, yellow, red, and dim row styles with deterministic status priority.
+- [x] Apply styles only after plain-text layout and enable them only for a usable interactive terminal when `NO_COLOR` is absent and `TERM` is not `dumb`.
+- [x] Add focused tests for style selection, semantic priority, ASCII independence, exact plain-text equivalence after stripping ANSI, and repository-controlled control characters.
+- [x] Document interactive color behavior and run focused tests, source hygiene, formatting, vet, uncached race tests, repeated shuffled tests, build, and the complete quality gate.
 - [ ] Remove this completed proposal from `PROPOSALS.md`, remove `PLAN.md`, commit the cleanup, merge into `master`, and delete the feature branch.
 
 ## Acceptance criteria
