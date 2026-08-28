@@ -396,6 +396,16 @@ One broken repository should not affect monitoring of the others.
 
 Errors should be concise in the main table, with fuller detail available through selection or a status line if necessary.
 
+### Process exit status
+
+Exit status describes whether the command produced a trustworthy result, not whether repositories need attention:
+
+- `0`: a valid empty or repository result, including dirty, ahead, behind, fetch-failed, or partially broken collections; normal interactive exit also returns zero so transient repository failures can recover while monitoring
+- `1`: execution could not produce a trustworthy finite result, such as an unreadable scan root, unavailable Git executable, render failure, or every discovered repository failing local inspection
+- `2`: invalid command-line usage
+
+When every repository fails local inspection, finite output still renders the error rows before returning status 1. A repeated systemic failure, such as a missing Git executable, should produce one concise diagnostic rather than one warning per repository.
+
 ## Performance
 
 Optimize for repository collections typical of a developer workstation:

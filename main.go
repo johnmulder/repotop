@@ -33,6 +33,7 @@ type repoStatus struct {
 	HasRemote   bool
 	HasUpstream bool
 	Error       string
+	FailureKind gitFailureKind
 }
 
 func main() {
@@ -183,15 +184,32 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	statuses := coordinator.snapshot()
-	reportRepositoryWarnings(stderr, statuses)
+	usable := reportRepositoryWarnings(stderr, statuses)
 	if err := render(stdout, statuses, palette); err != nil {
 		fmt.Fprintf(stderr, "repotop: render: %v\n", err)
+		return 1
+	}
+	if !usable {
 		return 1
 	}
 	return 0
 }
 
-func reportRepositoryWarnings(stderr io.Writer, statuses []repositorySnapshot) {
+func reportRepositoryWarnings(stderr io.Writer, statuses []repositorySnapshot) bool {
+	if len(statuses) == 0 {
+		return true
+	}
+	usable := false
+	for _, status := range statuses {
+		if status.Error == "" {
+			usable = true
+			break
+		}
+	}
+	if !usable {
+		fmt.Fprintf(stderr, "repotop: unable to inspect any repository: %s\n", oneLine(statuses[0].Error))
+		return false
+	}
 	for _, status := range statuses {
 		if status.Error != "" {
 			fmt.Fprintf(stderr, "warning: %s: %s\n", safeCell(status.Path), oneLine(status.Error))
@@ -201,6 +219,7 @@ func reportRepositoryWarnings(stderr io.Writer, statuses []repositorySnapshot) {
 		}
 		fmt.Fprintf(stderr, "warning: %s: fetch: %s\n", safeCell(status.Path), status.Fetch.Error)
 	}
+	return true
 }
 
 func normalizeExclusion(value string) (string, error) {
@@ -299,23 +318,31 @@ func inspectRepository(parent context.Context, root, repository string) repoStat
 	defer cancel()
 	output, err := runGit(ctx, repository, true, "status", "--porcelain=v2", "--branch", "-z")
 	if err != nil {
-		status.Error = err.Error()
+		setRepositoryError(&status, err)
 		return status
 	}
 
 	parsed, err := parsePorcelain(output)
 	if err != nil {
-		status.Error = err.Error()
+		setRepositoryError(&status, err)
 		return status
 	}
 	parsed.Path = status.Path
 	remotes, err := runGit(ctx, repository, true, "remote")
 	if err != nil {
-		parsed.Error = err.Error()
+		setRepositoryError(&parsed, err)
 		return parsed
 	}
 	parsed.HasRemote = parsed.HasRemote || len(bytes.TrimSpace(remotes)) > 0
 	return parsed
+}
+
+func setRepositoryError(status *repoStatus, err error) {
+	status.Error = err.Error()
+	var failure *gitFailure
+	if errors.As(err, &failure) {
+		status.FailureKind = failure.Kind
+	}
 }
 
 func parsePorcelain(output []byte) (repoStatus, error) {

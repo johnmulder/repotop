@@ -148,6 +148,25 @@ func TestInteractiveSessionNoFetchPolicy(t *testing.T) {
 	}
 }
 
+func TestInteractiveSessionKeepsRepositoryFailuresNonfatal(t *testing.T) {
+	coordinator := newRepositoryCoordinator()
+	dashboard := newTerminalDashboard(&bytes.Buffer{}, func() int { return 80 }, asciiPalette)
+	session := newInteractiveSession("/root", nil, []string{"/root/broken"}, coordinator, dashboard, &bytes.Buffer{}, false)
+	session.inspect = func(context.Context, string, string) repoStatus {
+		return repoStatus{Path: "broken", Error: "malformed repository"}
+	}
+	requests := make(chan sessionRequest, 1)
+	result := make(chan error, 1)
+	go func() {
+		result <- session.runWithTicks(context.Background(), requests, nil, nil)
+	}()
+	waitForDashboardSize(t, dashboard, 1)
+	requests <- requestQuit
+	if err := <-result; err != nil {
+		t.Fatalf("interactive repository failure = %v", err)
+	}
+}
+
 func waitForDashboardSize(t *testing.T, dashboard *terminalDashboard, size int) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)

@@ -76,6 +76,9 @@ func TestRunGitMissingExecutable(t *testing.T) {
 	requireGitFailure(t, checkGitExecutable(), gitFailureMissing)
 	_, err := runGit(context.Background(), t.TempDir(), true, "status")
 	requireGitFailure(t, err, gitFailureMissing)
+	if status := inspectRepository(context.Background(), t.TempDir(), t.TempDir()); status.FailureKind != gitFailureMissing {
+		t.Fatalf("inspection failure kind = %q, want %q", status.FailureKind, gitFailureMissing)
+	}
 }
 
 func TestRunGitReadOnlyEnvironment(t *testing.T) {
@@ -134,11 +137,18 @@ case "$FAKE_GIT_MODE" in
   environment) printf "%s" "$GIT_OPTIONAL_LOCKS" ;;
   fetch) printf "%s|%s|%s" "$GIT_TERMINAL_PROMPT" "$3" "$4" > "$FAKE_GIT_MARKER" ;;
   timeout) exec /bin/sleep 5 ;;
-  run|run-behind|run-dirty)
+  run|run-behind|run-dirty|run-partial|run-fetch-failure)
     if [ "$3" = fetch ]; then
+      if [ "$FAKE_GIT_MODE" = run-fetch-failure ]; then
+        echo "fatal: offline" >&2
+        exit 1
+      fi
       : > "$FAKE_GIT_MARKER"
     elif [ "$3" = remote ]; then
       printf 'origin\n'
+    elif [ "$FAKE_GIT_MODE" = run-partial ] && [ "${2##*/}" = broken ]; then
+      echo "fatal: ordinary failure" >&2
+      exit 1
     elif [ "$FAKE_GIT_MODE" = run-behind ]; then
       printf '# branch.head main\0# branch.upstream origin/main\0# branch.ab +0 -1\0'
     elif [ "$FAKE_GIT_MODE" = run-dirty ]; then

@@ -483,6 +483,73 @@ func TestRunFailsWhenRootIsInaccessible(t *testing.T) {
 	}
 }
 
+func TestRunKeepsPartialScanWarningsNonfatal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse permissionless directories")
+	}
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MODE", "run")
+	root := t.TempDir()
+	blocked := filepath.Join(root, "blocked")
+	mustMkdir(t, blocked)
+	mustMkdir(t, filepath.Join(root, "repo", ".git"))
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--once", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("partial scan exit = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "repo") || !strings.Contains(stderr.String(), "warning:") {
+		t.Fatalf("partial scan output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunInspectionFailureOutcomes(t *testing.T) {
+	installFakeGit(t)
+	root := t.TempDir()
+	for _, repository := range []string{"broken", "good"} {
+		mustMkdir(t, filepath.Join(root, repository, ".git"))
+	}
+
+	t.Setenv("FAKE_GIT_MODE", "run-partial")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--ascii", "--once", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("partial inspection exit = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "broken") || !strings.Contains(stdout.String(), "good") ||
+		!strings.Contains(stderr.String(), "warning: broken:") {
+		t.Fatalf("partial inspection output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	t.Setenv("FAKE_GIT_MODE", "ordinary")
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--ascii", "--once", root}, &stdout, &stderr); code != 1 {
+		t.Fatalf("total inspection failure exit = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "2 errors") || strings.Contains(stderr.String(), "warning:") ||
+		strings.Count(stderr.String(), "unable to inspect any repository") != 1 {
+		t.Fatalf("total inspection failure output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunFetchFailureRemainsData(t *testing.T) {
+	installFakeGit(t)
+	t.Setenv("FAKE_GIT_MODE", "run-fetch-failure")
+	t.Setenv("FAKE_GIT_MARKER", filepath.Join(t.TempDir(), "fetch"))
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, ".git"))
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--ascii", "--once", "--fetch", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("fetch failure exit = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "failed") || !strings.Contains(stderr.String(), "warning: .: fetch:") {
+		t.Fatalf("fetch failure output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestRunHelpAndExtraArgument(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 {
