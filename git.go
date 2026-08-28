@@ -55,6 +55,18 @@ type cappedBuffer struct {
 	truncated bool
 }
 
+func checkGitExecutable() error {
+	if _, err := exec.LookPath("git"); err != nil {
+		return &gitFailure{
+			Operation: "lookup",
+			Kind:      gitFailureMissing,
+			Detail:    "executable not found",
+			cause:     err,
+		}
+	}
+	return nil
+}
+
 func (buffer *cappedBuffer) Write(data []byte) (int, error) {
 	written := len(data)
 	remaining := buffer.limit - buffer.buffer.Len()

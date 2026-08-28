@@ -176,6 +176,24 @@ func TestDiscoverContinuesAfterInaccessibleDirectory(t *testing.T) {
 	}
 }
 
+func TestDiscoverFailsWhenRootIsInaccessible(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse permissionless directories")
+	}
+	root := t.TempDir()
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+	repositories, scanErrors, err := discover(context.Background(), root, nil)
+	if err == nil {
+		t.Fatalf("discover returned repositories=%v warnings=%v", repositories, scanErrors)
+	}
+	if len(repositories) != 0 || len(scanErrors) != 0 {
+		t.Fatalf("root failure returned repositories=%v warnings=%v", repositories, scanErrors)
+	}
+}
+
 func TestParsePorcelain(t *testing.T) {
 	records := []string{
 		"# branch.oid 0123456789",
@@ -425,6 +443,43 @@ func TestRunEmptyAndInvalidDirectories(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "repotop:") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunRequiresGitOnlyForNonemptyDiscovery(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("empty directory exit = %d, stderr = %q", code, stderr.String())
+	}
+
+	mustMkdir(t, filepath.Join(root, ".git"))
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--once", root}, &stdout, &stderr); code != 1 {
+		t.Fatalf("missing Git exit = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 || stderr.String() != "repotop: git lookup: executable not found\n" {
+		t.Fatalf("missing Git output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunFailsWhenRootIsInaccessible(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can traverse permissionless directories")
+	}
+	root := t.TempDir()
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{root}, &stdout, &stderr); code != 1 {
+		t.Fatalf("unreadable root exit = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "repotop: scan:") {
+		t.Fatalf("unreadable root output: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

@@ -73,6 +73,7 @@ func TestRunGitFailureKinds(t *testing.T) {
 
 func TestRunGitMissingExecutable(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
+	requireGitFailure(t, checkGitExecutable(), gitFailureMissing)
 	_, err := runGit(context.Background(), t.TempDir(), true, "status")
 	requireGitFailure(t, err, gitFailureMissing)
 }

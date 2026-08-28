@@ -123,6 +123,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "no Git repositories found beneath %s\n", safeCell(absRoot))
 		return 0
 	}
+	if err := checkGitExecutable(); err != nil {
+		fmt.Fprintf(stderr, "repotop: %v\n", err)
+		return 1
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -238,7 +242,11 @@ func discover(ctx context.Context, root string, exclusions map[string]struct{}) 
 			return err
 		}
 		if walkErr != nil {
-			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", path, walkErr))
+			failure := fmt.Errorf("%s: %w", path, walkErr)
+			if path == root {
+				return failure
+			}
+			scanErrors = append(scanErrors, failure)
 			if entry != nil && entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -260,7 +268,11 @@ func discover(ctx context.Context, root string, exclusions map[string]struct{}) 
 			repositories = append(repositories, path)
 			return fs.SkipDir
 		case err != nil && !errors.Is(err, fs.ErrNotExist):
-			scanErrors = append(scanErrors, fmt.Errorf("%s: %w", gitMarker, err))
+			failure := fmt.Errorf("%s: %w", gitMarker, err)
+			if path == root {
+				return failure
+			}
+			scanErrors = append(scanErrors, failure)
 			return fs.SkipDir
 		default:
 			return nil
@@ -271,7 +283,7 @@ func discover(ctx context.Context, root string, exclusions map[string]struct{}) 
 		return repositories, scanErrors, err
 	}
 	if walkErr != nil {
-		scanErrors = append(scanErrors, walkErr)
+		return repositories, scanErrors, walkErr
 	}
 	return repositories, scanErrors, nil
 }
