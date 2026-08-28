@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 const (
@@ -184,7 +184,7 @@ func selectionPrefix(path, selected string, palette renderPalette) string {
 	if path == selected {
 		return palette.selection
 	}
-	return strings.Repeat(" ", utf8.RuneCountInString(palette.selection))
+	return strings.Repeat(" ", displayWidth(palette.selection))
 }
 
 func renderSummary(width, repositories, clean, dirty, ahead, behind, failures int) string {
@@ -300,7 +300,8 @@ func wrappedLine(value string, width int) []string {
 		part := takePrefixCells(value, width)
 		consumed := len(part)
 		if consumed == 0 {
-			_, consumed = utf8.DecodeRuneInString(value)
+			cluster, _, _, _ := uniseg.FirstGraphemeClusterInString(value, -1)
+			consumed = len(cluster)
 			part = "?"
 		}
 		lines = append(lines, part)
@@ -341,56 +342,23 @@ func fitLine(value string, width int) string {
 }
 
 func displayWidth(value string) int {
-	width := 0
-	for _, character := range value {
-		width += runeWidth(character)
-	}
-	return width
-}
-
-func runeWidth(character rune) int {
-	switch {
-	case unicode.IsControl(character),
-		unicode.Is(unicode.Mn, character),
-		unicode.Is(unicode.Me, character),
-		unicode.Is(unicode.Cf, character):
-		return 0
-	case isWideRune(character):
-		return 2
-	default:
-		return 1
-	}
-}
-
-// ponytail: this compact wcwidth approximation covers common repository names;
-// use a maintained grapheme-width package if real terminals expose edge cases.
-func isWideRune(character rune) bool {
-	return character >= 0x1100 && (character <= 0x115f ||
-		character == 0x2329 || character == 0x232a ||
-		character >= 0x2e80 && character <= 0xa4cf && character != 0x303f ||
-		character >= 0xac00 && character <= 0xd7a3 ||
-		character >= 0xf900 && character <= 0xfaff ||
-		character >= 0xfe10 && character <= 0xfe19 ||
-		character >= 0xfe30 && character <= 0xfe6f ||
-		character >= 0xff00 && character <= 0xff60 ||
-		character >= 0xffe0 && character <= 0xffe6 ||
-		character >= 0x1f300 && character <= 0x1faff ||
-		character >= 0x20000 && character <= 0x3fffd)
+	return uniseg.StringWidth(value)
 }
 
 func takePrefixCells(value string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	cells, end := 0, 0
-	for index, character := range value {
-		characterWidth := runeWidth(character)
-		if cells+characterWidth > width {
+	cells, end, state := 0, 0, -1
+	rest := value
+	for rest != "" {
+		cluster, next, clusterWidth, nextState := uniseg.FirstGraphemeClusterInString(rest, state)
+		if cells+clusterWidth > width {
 			break
 		}
-		cells += characterWidth
-		_, size := utf8.DecodeRuneInString(value[index:])
-		end = index + size
+		cells += clusterWidth
+		end += len(cluster)
+		rest, state = next, nextState
 	}
 	return value[:end]
 }
@@ -399,18 +367,22 @@ func takeSuffixCells(value string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	characters := []rune(value)
-	cells, start := 0, len(characters)
-	for index := len(characters) - 1; index >= 0; index-- {
-		characterWidth := runeWidth(characters[index])
-		if cells+characterWidth > width {
+	cells := displayWidth(value)
+	if cells <= width {
+		return value
+	}
+	state := -1
+	for value != "" && cells > width {
+		_, rest, clusterWidth, nextState := uniseg.FirstGraphemeClusterInString(value, state)
+		value, state = rest, nextState
+		cells -= clusterWidth
+	}
+	for value != "" {
+		_, rest, clusterWidth, nextState := uniseg.FirstGraphemeClusterInString(value, state)
+		if clusterWidth > 0 {
 			break
 		}
-		cells += characterWidth
-		start = index
+		value, state = rest, nextState
 	}
-	for start < len(characters) && runeWidth(characters[start]) == 0 {
-		start++
-	}
-	return string(characters[start:])
+	return value
 }

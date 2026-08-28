@@ -7,9 +7,9 @@ Measure and slice terminal text by Unicode grapheme cluster so joined emoji and 
 ## Steps
 
 - [x] Verify `master` contains every completed plan, has no unmerged completed feature branch, and has no stale `PLAN.md`.
-- [ ] Add focused width, truncation, wrapping, ambiguous-width, and sanitization cases for combining text, CJK text, emoji modifiers, and joined emoji.
-- [ ] Replace the custom rune-width approximation with `rivo/uniseg` and route measurement, slicing, wrapping, padding, and selection indentation through grapheme-aware helpers.
-- [ ] Run formatting, vet, uncached race tests, repeated shuffled tests, build, and the complete quality gate.
+- [x] Add focused width, truncation, wrapping, ambiguous-width, and sanitization cases for combining text, CJK text, emoji modifiers, and joined emoji.
+- [x] Replace the custom rune-width approximation with `rivo/uniseg` and route measurement, slicing, wrapping, padding, and selection indentation through grapheme-aware helpers.
+- [x] Run formatting, vet, uncached race tests, repeated shuffled tests, build, and the complete quality gate.
 - [ ] Remove this completed proposal from `PROPOSALS.md`, remove `PLAN.md`, commit the cleanup, merge into `master`, and delete the feature branch.
 
 ## Acceptance criteria

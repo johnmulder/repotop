@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,8 @@ func TestUnicodePaletteUsesReviewedGlyphsWithoutLosingText(t *testing.T) {
 }
 
 func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
+	joinedEmoji := "\U0001f469\u200d\U0001f4bb"
+	modifiedEmoji := "\U0001f44d\U0001f3fd"
 	tests := []struct {
 		value string
 		want  int
@@ -73,6 +76,9 @@ func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
 		{value: "e\u0301", want: 1},
 		{value: "\u4ed3\u5e93", want: 4},
 		{value: "\U0001f680", want: 2},
+		{value: "\u00b7", want: 1},
+		{value: modifiedEmoji, want: 2},
+		{value: joinedEmoji, want: 2},
 	}
 	for _, test := range tests {
 		if got := displayWidth(test.value); got != test.want {
@@ -102,6 +108,38 @@ func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
 	}
 	if got := takeSuffixCells("ae\u0301", 1); got != "e\u0301" {
 		t.Fatalf("suffix split combining sequence: %q", got)
+	}
+
+	graphemeValue := "a" + joinedEmoji + "b"
+	if got := takePrefixCells(graphemeValue, 3); got != "a"+joinedEmoji {
+		t.Fatalf("prefix split joined emoji: %q", got)
+	}
+	if got := takePrefixCells(graphemeValue, 2); got != "a" {
+		t.Fatalf("prefix retained partial joined emoji: %q", got)
+	}
+	if got := takeSuffixCells(graphemeValue, 3); got != joinedEmoji+"b" {
+		t.Fatalf("suffix split joined emoji: %q", got)
+	}
+	if got := takeSuffixCells(graphemeValue, 2); got != "b" {
+		t.Fatalf("suffix retained partial joined emoji: %q", got)
+	}
+	if got := truncateEnd(graphemeValue+"c", 4); got != "a..." {
+		t.Fatalf("end truncation split joined emoji: %q", got)
+	}
+	if got := middleTruncate("abcdef"+joinedEmoji+"b", 7); got != "a..."+joinedEmoji+"b" {
+		t.Fatalf("middle truncation split joined emoji: %q", got)
+	}
+	if got := wrappedLine(graphemeValue, 2); !reflect.DeepEqual(got, []string{"a", joinedEmoji, "b"}) {
+		t.Fatalf("wrapping split joined emoji: %q", got)
+	}
+	if got := wrappedLine(joinedEmoji, 1); !reflect.DeepEqual(got, []string{"?"}) {
+		t.Fatalf("narrow wrapping split joined emoji: %q", got)
+	}
+	if got := selectionPrefix("other", "selected", renderPalette{selection: joinedEmoji}); got != "  " {
+		t.Fatalf("selection indentation = %q, want two cells", got)
+	}
+	if got := safeCell(joinedEmoji + "\x1b"); got != joinedEmoji+"?" || displayWidth(got) != 3 {
+		t.Fatalf("sanitized grapheme = %q (%d cells)", got, displayWidth(got))
 	}
 }
 
