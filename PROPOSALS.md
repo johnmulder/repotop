@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. They are grounded in the difference between the current implementation and the direction in `IDEA.md`; speculative repository-management features remain out of scope.
 
-## P1: Add accessible status color without changing layout
-
-### Gap
-
-Color-coded status is part of the core product description and initial success criteria, but the renderer currently emits only ASCII or Unicode glyph palettes and never emits color. The existing `NO_COLOR` test passes because there is no color to disable. Users therefore cannot distinguish clean, attention-worthy, behind, and unavailable states as quickly as the design intends.
-
-### Approach
-
-Add a small semantic style layer for green clean/current state, yellow dirty/ahead state, red behind/error state, and dim missing-remote state. Enable ANSI styling only for an interactive terminal when `NO_COLOR` is unset and the terminal is usable. Apply styling after cell measurement and truncation so escape sequences never affect grapheme width or column alignment.
-
-### Implementation considerations
-
-- Keep every textual marker authoritative; color must never be the only status signal.
-- Treat `--ascii` and color as independent choices so ASCII glyphs may still be colored.
-- Honor `NO_COLOR`, redirected output, and a dumb terminal without adding a color dependency.
-- Never pass repository-controlled text through an ANSI-generating path, and retain the existing control-character sanitization.
-- Test that stripping ANSI from colored output exactly matches the existing snapshot and that all no-color modes remain byte-for-byte stable.
-
 ## P2: Add a machine-readable finite snapshot
 
 ### Gap
