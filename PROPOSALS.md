@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. They are grounded in the difference between the current implementation and the direction in `IDEA.md`; speculative repository-management features remain out of scope.
 
-## P2: Make the remote refresh interval configurable
-
-### Gap
-
-Interactive local refresh is fixed at two seconds and remote refresh at three minutes. The local default is inexpensive, but one remote schedule cannot fit both large hosted-repository trees and fast local or filesystem remotes. The only current alternative is `--no-fetch`, which disables remote truth entirely, while `IDEA.md` already names a fetch-interval option as a likely small extension.
-
-### Approach
-
-Add one `--fetch-interval DURATION` flag parsed with `time.ParseDuration`, defaulting to the current three minutes. Pass it to the interactive ticker and freshness renderer. Keep the local interval and worker counts internal until evidence shows they also need configuration.
-
-### Implementation considerations
-
-- Require a positive duration; continue using `--no-fetch` as the explicit disabled state.
-- Document that the option controls interactive scheduling and the stale threshold, while finite mode still fetches only with `--fetch`.
-- Preserve the initial local-first render followed by asynchronous remote refresh.
-- Inject or reuse test tick channels so interval tests do not sleep or depend on wall-clock timing.
-- Let the existing README option-drift test require documentation when the flag is added.
-
 ## P2: Review non-ASCII text in every project text format
 
 ### Gap
