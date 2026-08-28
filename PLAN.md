@@ -7,8 +7,8 @@ Give users and contributors one concise, accurate README for the command that ex
 ## Steps
 
 - [x] Verify `master` contains every completed plan, has no unmerged completed feature branch, and has no stale `PLAN.md`.
-- [ ] Document source installation, current options, discovery and exclusion rules, fetch policy, terminal versus finite output, state meanings, platform support, exit codes, and the development quality command.
-- [ ] Mark aspirational CLI examples in `IDEA.md` as design direction rather than shipped documentation.
+- [x] Document source installation, current options, discovery and exclusion rules, fetch policy, terminal versus finite output, state meanings, platform support, exit codes, and the development quality command.
+- [x] Mark aspirational CLI examples in `IDEA.md` as design direction rather than shipped documentation.
 - [ ] Add a small test that derives the option list from actual help output and requires every shipped option to appear in the README.
 - [ ] Run source hygiene, focused documentation tests, formatting, vet, uncached race tests, repeated shuffled tests, build, and the complete quality gate.
 - [ ] Remove this completed proposal from `PROPOSALS.md`, remove `PLAN.md`, commit the cleanup, merge into `master`, and delete the feature branch.

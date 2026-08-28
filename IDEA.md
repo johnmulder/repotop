@@ -1,5 +1,7 @@
 # repotop
 
+This file records product design and future direction. See `README.md` for the behavior, options, and controls implemented by the current command; candidate behavior below is not a shipped contract.
+
 ## Idea
 
 `repotop` is an `htop`-like terminal dashboard for Git repositories beneath a directory tree.
@@ -92,6 +94,8 @@ It should not:
 If an operation changes repository history or working-tree contents, it probably does not belong in `repotop`.
 
 ## Interface
+
+This section captures design direction. The complete shipped syntax and option list are maintained in `README.md`; candidate options below may not exist yet.
 
 The primary interface should remain:
 
@@ -457,9 +461,6 @@ Only consider these after the basic tool has proven useful:
 - filtering/search
 - alternate sort order
 - JSON or line-oriented noninteractive output
-- configurable directory exclusions
-- repository selection with expanded details
-- stale-fetch indicator
 - fetch only selected repository
 - optional recognition of bare repositories
 - shell command to print the selected repository path
