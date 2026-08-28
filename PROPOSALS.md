@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. The review that produced this list found the implementation well tested and internally cohesive, so these entries focus on gaps that affect the product contract or make regressions harder to detect.
 
-## P2: Make terminal width and truncation grapheme-aware
-
-### Gap
-
-The renderer uses a compact rune-range approximation for terminal cell width. It handles common CJK names and combining marks, but it counts joined emoji and emoji-plus-skin-tone sequences as multiple wide glyphs even though terminals commonly display each sequence as one two-cell grapheme. Truncation can also split a joined sequence. The result is avoidable column drift or malformed-looking repository names for valid non-ASCII paths.
-
-### Approach
-
-Add table-driven cases for joined emoji, modifiers, combining sequences, and CJK text, then replace the rune-by-rune width and slicing helpers with a maintained grapheme-width implementation that passes those cases. Route measurement, prefix and suffix truncation, padding, wrapping, and selection indentation through the same width primitive.
-
-### Implementation considerations
-
-- Prefer one small, maintained dependency over expanding custom Unicode tables and grapheme logic.
-- Define the expected policy for ambiguous-width characters and verify it on the supported terminals.
-- Keep `--ascii` behavior unchanged; it controls application glyphs, not user path names.
-- Express Unicode test data with Go escapes or deliberately extend the reviewed-rune allowlist so the source guard remains meaningful.
-- Sanitize terminal controls before measuring and never split or retain a dangling zero-width sequence at a truncation boundary.
-
 ## P2: Add user and contributor documentation for shipped behavior
 
 ### Gap
