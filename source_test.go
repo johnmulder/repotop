@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode"
+	"unicode/utf8"
 )
 
 func TestREADMEListsEveryShippedOption(t *testing.T) {
@@ -36,9 +38,54 @@ func TestNonASCIISourceIsReviewed(t *testing.T) {
 		"IDEA.md":    "\u2013\u2014\u2191\u2193\u2500\u2713",
 		"palette.go": "\u2014\u203a\u2191\u2193\u2500\u2713",
 	}
-	extensions := map[string]bool{".go": true, ".md": true, ".mod": true}
+	findings, err := findUnreviewedRunes(".", reviewed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		t.Error(finding)
+	}
+}
 
-	err := filepath.WalkDir(".", func(path string, entry fs.DirEntry, walkErr error) error {
+func TestFindUnreviewedRunesCoversProjectTextFormats(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string][]byte{
+		"Makefile":    []byte("target \u2602\n"),
+		"config.yml":  []byte("name: \u2603\n"),
+		"binary.dat":  {0, 0xe2, 0x98, 0x83},
+		"invalid.bin": {0xff, 0xfe},
+		".git/config": []byte("ignored \u2605\n"),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	findings, err := findUnreviewedRunes(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("findings = %v, want YAML and extensionless text", findings)
+	}
+	joined := strings.Join(findings, "\n")
+	for _, want := range []string{
+		"Makefile byte 7 contains unreviewed rune U+2602",
+		"config.yml byte 6 contains unreviewed rune U+2603",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("findings = %v, missing %q", findings, want)
+		}
+	}
+}
+
+func findUnreviewedRunes(root string, reviewed map[string]string) ([]string, error) {
+	var findings []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -48,23 +95,28 @@ func TestNonASCIISourceIsReviewed(t *testing.T) {
 			}
 			return nil
 		}
-		if !extensions[filepath.Ext(path)] {
+		if !entry.Type().IsRegular() {
 			return nil
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		name := filepath.ToSlash(strings.TrimPrefix(path, "."+string(filepath.Separator)))
+		if bytes.IndexByte(content, 0) >= 0 || !utf8.Valid(content) {
+			return nil
+		}
+		name, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		name = filepath.ToSlash(name)
 		for offset, character := range string(content) {
 			if character <= unicode.MaxASCII || strings.ContainsRune(reviewed[name], character) {
 				continue
 			}
-			t.Errorf("%s byte %d contains unreviewed rune U+%04X", name, offset, character)
+			findings = append(findings, fmt.Sprintf("%s byte %d contains unreviewed rune U+%04X", name, offset, character))
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	return findings, err
 }

@@ -6,16 +6,16 @@ Make the reviewed-character test cover project text files regardless of extensio
 
 ## Implementation
 
-- [ ] Replace the extension allowlist with a source-tree walk over regular files.
-- [ ] Skip `.git` directories, invalid UTF-8 files, and files containing NUL bytes.
-- [ ] Preserve the explicit per-path reviewed-rune allowlist and path, byte-offset, and code-point diagnostics.
-- [ ] Add synthetic YAML and extensionless text fixtures that prove non-ASCII characters are detected.
-- [ ] Add binary and `.git` fixtures that prove non-project content is ignored.
+- [x] Replace the extension allowlist with a source-tree walk over regular files.
+- [x] Skip `.git` directories, invalid UTF-8 files, and files containing NUL bytes.
+- [x] Preserve the explicit per-path reviewed-rune allowlist and path, byte-offset, and code-point diagnostics.
+- [x] Add synthetic YAML and extensionless text fixtures that prove non-ASCII characters are detected.
+- [x] Add binary and `.git` fixtures that prove non-project content is ignored.
 
 ## Verification
 
-- [ ] Run focused reviewed-character tests.
-- [ ] Run `make check` and repeated shuffled tests.
+- [x] Run focused reviewed-character tests.
+- [x] Run `make check` and repeated shuffled tests.
 - [ ] Run Git whitespace and merge-tree checks.
 
 ## Completion
