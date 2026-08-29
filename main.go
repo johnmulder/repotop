@@ -20,6 +20,8 @@ import (
 
 const localStatusTimeout = 5 * time.Second
 
+var version = "devel"
+
 type repoStatus struct {
 	Path        string
 	Branch      string
@@ -63,12 +65,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 	noFetch := flags.Bool("no-fetch", false, "skip remote refresh")
 	once := flags.Bool("once", false, "render one final snapshot")
 	scanStats := flags.Bool("scan-stats", false, "report discovery timing and counts")
+	showVersion := flags.Bool("version", false, "print version and exit")
 
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
+	}
+	if *showVersion {
+		if _, err := fmt.Fprintf(stdout, "repotop %s\n", version); err != nil {
+			fmt.Fprintf(stderr, "repotop: version: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 	if flags.NArg() > 1 {
 		fmt.Fprintln(stderr, "repotop: expected at most one directory")

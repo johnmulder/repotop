@@ -43,6 +43,7 @@ The directory defaults to the current directory.
 | `--no-fetch` | Disable automatic and manual remote fetches. |
 | `--once` | Render one final snapshot, even when attached to a terminal. |
 | `--scan-stats` | Write discovery duration and counts to standard error. |
+| `--version` | Print the build version and exit. |
 
 `--fetch` and `--no-fetch` are mutually exclusive. `--fetch-interval` accepts a positive Go duration such as `30s`, `5m`, or `1h`. Exclusions cannot be absolute, missing, ordinary files, or paths outside the scan root.
 
@@ -53,7 +54,10 @@ repotop ~/src
 repotop --no-fetch --exclude vendor ~/src
 repotop --fetch-interval 30s ~/src
 repotop --ascii --once --fetch ~/src
+repotop --version
 ```
+
+Source and other untagged builds report `repotop devel`. Release builds report the version tag injected at build time.
 
 ## Output modes and refresh policy
 

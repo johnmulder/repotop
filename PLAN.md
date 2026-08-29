@@ -6,8 +6,8 @@ Add an identifiable development version and a tag-gated GitHub release pipeline 
 
 ## Implementation
 
-- [ ] Add `--version`, default development builds to `devel`, and support build-time version injection with Go linker flags.
-- [ ] Test that version output exits without scanning a directory or requiring Git.
+- [x] Add `--version`, default development builds to `devel`, and support build-time version injection with Go linker flags.
+- [x] Test that version output exits without scanning a directory or requiring Git.
 - [ ] Add a Make target that builds, smoke-tests, and archives one native release binary using a validated `vMAJOR.MINOR.PATCH` version.
 - [ ] Add a tag-triggered GitHub Actions workflow that gates on `make check` and uses native Linux/macOS amd64/arm64 runners.
 - [ ] Smoke-test `--help` and `--version` for every matrix artifact before upload.

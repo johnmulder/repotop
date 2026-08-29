@@ -105,11 +105,7 @@ repotop [directory]
 
 If `directory` is omitted, use the current directory.
 
-Options should be kept deliberately small. One reasonable future addition is:
-
-```text
-repotop --version
-```
+Options should be kept deliberately small. The implemented option list belongs in `README.md` rather than being duplicated here.
 
 Avoid configuration files unless a compelling real-world requirement appears.
 

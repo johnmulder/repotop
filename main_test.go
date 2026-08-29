@@ -566,6 +566,17 @@ func TestRunHelpAndExtraArgument(t *testing.T) {
 	}
 }
 
+func TestRunVersionDoesNotRequireGitOrScan(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--version"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("version exit = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.String() != "repotop devel\n" || stderr.Len() != 0 {
+		t.Fatalf("version output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestRunRejectsInvalidFetchIntervals(t *testing.T) {
 	for _, interval := range []string{"0s", "-1s", "invalid"} {
 		t.Run(interval, func(t *testing.T) {
