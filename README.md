@@ -124,3 +124,13 @@ make check
 ```
 
 `make check` verifies formatting, runs `go vet`, runs uncached race-enabled tests, and builds the command. See [IDEA.md](IDEA.md) for design rationale and possible future directions.
+
+## Releases
+
+Maintainers can build and smoke-test an archive for the current operating system and architecture with:
+
+```sh
+make release RELEASE_VERSION=v1.2.3
+```
+
+When the repository is hosted on GitHub, a protected `vMAJOR.MINOR.PATCH` tag triggers the release workflow. It runs the normal quality gate, builds and executes native macOS and Linux binaries for amd64 and arm64, publishes four `.tar.gz` archives, and includes a SHA-256 checksum manifest. Configure protection for the `release` environment and version tags before publishing. No download URL is documented until a hosted release succeeds.

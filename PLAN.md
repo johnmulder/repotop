@@ -9,22 +9,22 @@ Add an identifiable development version and a tag-gated GitHub release pipeline 
 - [x] Add `--version`, default development builds to `devel`, and support build-time version injection with Go linker flags.
 - [x] Test that version output exits without scanning a directory or requiring Git.
 - [x] Add a Make target that builds, smoke-tests, and archives one native release binary using a validated `vMAJOR.MINOR.PATCH` version.
-- [ ] Add a tag-triggered GitHub Actions workflow that gates on `make check` and uses native Linux/macOS amd64/arm64 runners.
-- [ ] Smoke-test `--help` and `--version` for every matrix artifact before upload.
-- [ ] Generate one checksum manifest and publish only the verified existing tag plus its four archives.
-- [ ] Document version behavior and the release process without advertising a download URL before a successful hosted release exists.
+- [x] Add a tag-triggered GitHub Actions workflow that gates on `make check` and uses native Linux/macOS amd64/arm64 runners.
+- [x] Smoke-test `--help` and `--version` for every matrix artifact before upload.
+- [x] Generate one checksum manifest and publish only the verified existing tag plus its four archives.
+- [x] Document version behavior and the release process without advertising a download URL before a successful hosted release exists.
 
 ## Verification
 
-- [ ] Run focused CLI version and release-workflow contract tests.
+- [x] Run focused CLI version and release-workflow contract tests.
 - [x] Build and inspect a native test archive through the Make target.
-- [ ] Validate workflow YAML and shell syntax with locally available tools.
-- [ ] Run `make check` and repeated shuffled tests.
+- [x] Validate workflow YAML and shell syntax with locally available tools.
+- [x] Run `make check` and repeated shuffled tests.
 - [ ] Run Git whitespace and merge-tree checks.
 
 ## Completion
 
 - [ ] Remove the completed proposal from `PROPOSALS.md`.
 - [ ] Remove `PLAN.md`.
-- [ ] Commit each major change with a one-line message.
+- [x] Commit each major change with a one-line message.
 - [ ] Fast-forward the completed feature branch into `master` and delete the feature branch.

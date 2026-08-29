@@ -33,6 +33,31 @@ func TestREADMEListsEveryShippedOption(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowContract(t *testing.T) {
+	workflow, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"make check",
+		"ubuntu-24.04\n",
+		"ubuntu-24.04-arm\n",
+		"macos-15-intel\n",
+		"macos-15\n",
+		"make release RELEASE_VERSION=\"$GITHUB_REF_NAME\"",
+		"actions/upload-artifact@v7",
+		"archive: false",
+		"actions/download-artifact@v8",
+		"skip-decompress: true",
+		"sha256sum *.tar.gz > checksums.txt",
+		"--verify-tag --generate-notes",
+	} {
+		if !bytes.Contains(workflow, []byte(required)) {
+			t.Errorf("release workflow is missing %q", required)
+		}
+	}
+}
+
 func TestNonASCIISourceIsReviewed(t *testing.T) {
 	reviewed := map[string]string{
 		"IDEA.md":    "\u2013\u2014\u2191\u2193\u2500\u2713",
