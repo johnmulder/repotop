@@ -2,24 +2,6 @@
 
 Proposals are ordered by priority. They are grounded in the difference between the current implementation and the direction in `IDEA.md`; speculative repository-management features remain out of scope.
 
-## P2: Review non-ASCII text in every project text format
-
-### Gap
-
-The reviewed-character test scans `.go`, `.md`, and `.mod` files only. The project now also contains `Makefile`, `.github/workflows/ci.yml`, and `go.sum`, so a new non-ASCII character in build or CI configuration can bypass the guard. This weakens the stated policy precisely as new file types are added.
-
-### Approach
-
-Extend the source walk to classify and scan project text files regardless of extension, while excluding `.git`, generated binaries, and clearly binary content. Keep the per-path reviewed-rune allowlist so intentional Unicode remains explicit and searchable.
-
-### Implementation considerations
-
-- Do not depend on current-checkout Git metadata; tests should also work from a source archive.
-- Use a small deterministic binary/text rule, such as valid UTF-8 without NUL bytes, plus explicit exclusions for generated artifacts.
-- Report the path, byte offset, and code point as the current test does.
-- Add a fixture covering a non-ASCII YAML or extensionless file so the broader guard cannot silently regress.
-- Avoid banning user data or test repositories created outside the source tree; this check is only for checked-in project text.
-
 ## P3: Produce versioned macOS and Linux release artifacts
 
 ### Gap
