@@ -1,6 +1,6 @@
 # repotop
 
-`repotop` is a read-only terminal dashboard for the Git repositories beneath a directory tree. It discovers repositories recursively, shows local worktree and upstream state, and refreshes a live display without modifying branches or working files. The optional `git fetch --prune` refresh changes remote-tracking refs only.
+`repotop` is an observational terminal dashboard for the Git repositories beneath a directory tree. It discovers repositories recursively, shows local worktree and upstream state, and refreshes a live display. It never directly edits checked-out files, creates commits, or invokes merge, rebase, pull, push, or checkout. When enabled, `git fetch --prune` updates repository metadata according to each repository's Git configuration, commonly remote-tracking refs and `FETCH_HEAD`.
 
 ## Requirements
 
@@ -22,6 +22,8 @@ To install into your configured Go binary directory:
 ```sh
 go install .
 ```
+
+`go install` writes `repotop` to `GOBIN` when configured, otherwise to the `bin` directory under `GOPATH` (normally `$HOME/go/bin`). Put that directory on `PATH`, then run `repotop --help`.
 
 ## Usage
 
@@ -67,13 +69,13 @@ In a supported terminal, `repotop` shows local results as they arrive, refreshes
 
 Redirected output and `--once` produce one final snapshot without terminal control sequences. Finite output uses cached remote-tracking refs by default; add `--fetch` to refresh them first. In finite mode, `--fetch-interval` changes only the freshness threshold and never triggers a fetch by itself.
 
-`--json` also selects finite mode and writes exactly one object. The top level contains the absolute `root` and a `repositories` array. Repository records contain the path and branch, dirty state and worktree counts, ahead/behind and remote availability, `remote_state`, fetch timestamps and duration, and local or fetch errors. Missing timestamps are empty strings; present timestamps are UTC RFC 3339 values. Diagnostics remain on standard error, and `--fetch` retains its normal opt-in behavior.
+`--json` also selects finite mode and writes exactly one object. The top level contains the absolute `root` and a `repositories` array. Repository `path` values are slash-separated and relative to `root`; `.` identifies a repository at the root itself. Records contain the branch, dirty state and worktree counts, ahead/behind and remote availability, `remote_state`, fetch timestamps and duration, and local or fetch errors. `fetch_duration_ms` is an integer number of milliseconds. Missing timestamps are empty strings; present timestamps are UTC RFC 3339 values. `error_kind` is empty when there is no classified local Git failure and otherwise identifies failures such as `timeout`, `permission`, or `not a repository`. Diagnostics remain on standard error, and `--fetch` retains its normal opt-in behavior.
 
 ```json
 {"root":"/src","repositories":[{"path":"project","branch":"main","dirty":false,"changed":0,"staged":0,"modified":0,"conflicted":0,"untracked":0,"ahead":0,"behind":0,"has_remote":true,"has_upstream":true,"remote_state":"cached","fetching":false,"fetch_last_attempt":"","fetch_last_success":"","fetch_duration_ms":0,"error":"","error_kind":"","fetch_error":""}]}
 ```
 
-Interactive repository rows use green for clean/current state, yellow for attention states such as dirty, ahead, fetching, or stale, red for behind or error state, and dim text for missing remote configuration. Text markers remain authoritative. Color is disabled when `NO_COLOR` is present, when `TERM=dumb`, and for all finite output. `--ascii` changes glyphs independently and does not disable color; it has no effect on JSON.
+Interactive row colors follow severity: local or fetch errors and behind state are red; otherwise dirty, ahead, fetching, or stale state is yellow; otherwise missing remote configuration is dim; otherwise current state is green. Clean cached rows use the terminal's default color. Text markers remain authoritative. Color is disabled when `NO_COLOR` is present, when `TERM=dumb`, and for all finite output. Unicode application glyphs are selected when the locale reports UTF-8; otherwise the command falls back to ASCII. `--ascii` forces ASCII glyphs without changing repository names or disabling color, and it has no effect on JSON.
 
 ## Reading the display
 
@@ -105,7 +107,7 @@ Fetch failures and individual repository errors are reported as data and warning
 ## Exit status
 
 - `0`: a valid empty or repository result, including dirty, ahead, behind, fetch-failed, or partially broken collections; also a normal interactive exit.
-- `1`: no trustworthy finite result could be produced, such as an unreadable root, missing Git executable, render failure, or every repository failing local inspection.
+- `1`: execution failed, such as from an unreadable root, missing Git executable, terminal or render failure, or every repository failing local inspection in finite mode.
 - `2`: invalid command-line usage or exclusion.
 
 ## Development

@@ -95,7 +95,7 @@ If an operation changes repository history or working-tree contents, it probably
 
 ## Interface
 
-This section captures design direction. The complete shipped syntax and option list are maintained in `README.md`; candidate options below may not exist yet.
+This section captures design direction. The complete shipped syntax and option list are maintained in `README.md`.
 
 The primary interface should remain:
 
@@ -105,13 +105,9 @@ repotop [directory]
 
 If `directory` is omitted, use the current directory.
 
-Options should be kept deliberately small. Reasonable candidates are:
+Options should be kept deliberately small. One reasonable future addition is:
 
 ```text
-repotop [directory]
-repotop --no-fetch [directory]
-repotop --fetch-interval DURATION [directory]
-repotop --help
 repotop --version
 ```
 
@@ -325,7 +321,7 @@ ui
     renders terminal state and handles keys
 ```
 
-The core repository inspection logic should not depend on the TUI. This makes it straightforward to test and leaves open the possibility of a future noninteractive output mode without designing around it now.
+The core repository inspection logic does not depend on the TUI. This keeps it straightforward to test and lets the interactive, finite text, and JSON modes consume the same normalized snapshots.
 
 The scheduler's coordinator is the sole owner of the repository map. Inspection workers emit repository identity, scan generation, and normalized status through a channel; they never mutate shared state. The coordinator ignores obsolete generations, removes missing repositories only after a matching scan completes, and publishes copied snapshots so consumers cannot mutate its state.
 
@@ -337,15 +333,13 @@ Rendering is a pure transformation of a sorted snapshot, terminal width, and sel
 
 Minimize external dependencies.
 
-The only required external executable should be:
+The only required runtime executable for repository inspection is:
 
 ```text
 git
 ```
 
-Implementation-language libraries should be chosen conservatively.
-
-A compiled implementation in Go or Rust would provide a convenient single executable. A Python implementation could be attractive for development speed but would either depend on the user's Python environment or require packaging into a standalone executable.
+`repotop` is implemented in Go to provide a convenient single executable. Its library dependencies should remain conservative.
 
 For this tool, deployment simplicity matters:
 

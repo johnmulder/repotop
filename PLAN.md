@@ -6,17 +6,17 @@ Align the getting-started and design documentation with the current command, ins
 
 ## Implementation
 
-- [ ] Clarify that fetch can update Git metadata while leaving checked-out files and local history untouched.
-- [ ] Explain where `go install .` writes the binary and that the install directory must be on `PATH`.
-- [ ] Tighten the descriptions of JSON paths, error fields, glyph selection, and color precedence.
-- [ ] Make exit-status wording cover both finite and interactive failures.
-- [ ] Remove stale claims in `IDEA.md` that shipped options, finite output, and the Go implementation are only future possibilities.
-- [ ] Preserve the source-build-only guidance because the repository still has no release host or downloadable artifacts.
+- [x] Clarify that fetch can update Git metadata while leaving checked-out files and local history untouched.
+- [x] Explain where `go install .` writes the binary and that the install directory must be on `PATH`.
+- [x] Tighten the descriptions of JSON paths, error fields, glyph selection, and color precedence.
+- [x] Make exit-status wording cover both finite and interactive failures.
+- [x] Remove stale claims in `IDEA.md` that shipped options, finite output, and the Go implementation are only future possibilities.
+- [x] Preserve the source-build-only guidance because the repository still has no release host or downloadable artifacts.
 
 ## Verification
 
-- [ ] Compare every documented option with `repotop --help` and run the README option-drift test.
-- [ ] Run `make check` and repeated shuffled tests.
+- [x] Compare every documented option with `repotop --help` and run the README option-drift test.
+- [x] Run `make check` and repeated shuffled tests.
 - [ ] Run Git whitespace and merge-tree checks.
 
 ## Completion
