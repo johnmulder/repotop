@@ -2,6 +2,23 @@
 
 Proposals are ordered by priority. They are grounded in the difference between the current implementation and the direction in `IDEA.md`; speculative repository-management features remain out of scope.
 
+## P1: Reset the cursor column between interactive rows
+
+### Gap
+
+Interactive mode switches the terminal to raw mode, which disables output post-processing on supported Unix terminals. The dashboard emits bare line feeds, so terminals that honor the raw setting move the cursor down without returning it to column zero. Rows then appear progressively offset even though the renderer's cell-width calculations are correct. Buffer-based renderer tests do not exercise this terminal behavior.
+
+### Approach
+
+Translate the renderer's line feeds to carriage-return/line-feed pairs only at the interactive dashboard write boundary. Keep the pure renderer and every finite output mode on ordinary line feeds.
+
+### Implementation considerations
+
+- Perform the translation after rendering so width, truncation, and snapshot deduplication remain unchanged.
+- Do not alter repository text or replace line endings in finite text or JSON output.
+- Add a dashboard-level regression test that rejects bare line feeds and confirms rows begin with CRLF while raw-terminal control sequences remain intact.
+- Preserve the existing terminal restoration and resize behavior.
+
 ## P3: Produce versioned macOS and Linux release artifacts
 
 ### Gap
