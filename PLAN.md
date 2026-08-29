@@ -6,15 +6,15 @@ Ensure every interactive dashboard row returns to column zero when terminal outp
 
 ## Implementation
 
-- [ ] Convert renderer line feeds to CRLF only when the terminal dashboard writes a frame.
-- [ ] Keep renderer output, cached frame comparison, finite text, and JSON line endings unchanged.
-- [ ] Add a dashboard regression test that detects any bare line feed in an interactive frame.
-- [ ] Preserve ANSI styling, repaint suppression, resizing, and terminal restoration.
+- [x] Convert renderer line feeds to CRLF only when the terminal dashboard writes a frame.
+- [x] Keep renderer output, cached frame comparison, finite text, and JSON line endings unchanged.
+- [x] Add a dashboard regression test that detects any bare line feed in an interactive frame.
+- [x] Preserve ANSI styling, repaint suppression, resizing, and terminal restoration.
 
 ## Verification
 
-- [ ] Run focused renderer, dashboard, and PTY integration tests.
-- [ ] Run `make check` and repeated shuffled tests.
+- [x] Run focused renderer, dashboard, and PTY integration tests.
+- [x] Run `make check` and repeated shuffled tests.
 - [ ] Run Git whitespace and merge-tree checks.
 
 ## Completion

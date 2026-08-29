@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,7 +161,7 @@ func (dashboard *terminalDashboard) drawLocked() {
 	if view == dashboard.last {
 		return
 	}
-	_, dashboard.err = io.WriteString(dashboard.output, "\x1b[H\x1b[2J"+view)
+	_, dashboard.err = io.WriteString(dashboard.output, "\x1b[H\x1b[2J"+strings.ReplaceAll(view, "\n", "\r\n"))
 	if dashboard.err == nil {
 		dashboard.last = view
 	}

@@ -110,6 +110,20 @@ func TestTerminalDashboardRepaintsOnChangeAndResizeByIdentity(t *testing.T) {
 	}
 }
 
+func TestTerminalDashboardUsesCRLFBetweenRows(t *testing.T) {
+	var output bytes.Buffer
+	dashboard := newTerminalDashboard(&output, func() int { return 80 }, asciiPalette)
+	dashboard.publish(snapshotsOf(repoStatus{Path: "repo", Branch: "main", HasUpstream: true}))
+
+	frame := output.String()
+	if !strings.Contains(frame, "\r\n") || strings.Contains(strings.ReplaceAll(frame, "\r\n", ""), "\n") {
+		t.Fatalf("interactive frame contains a bare line feed: %q", frame)
+	}
+	if strings.Contains(dashboard.last, "\r") {
+		t.Fatalf("cached renderer frame uses terminal line endings: %q", dashboard.last)
+	}
+}
+
 func TestTerminalDashboardMovesSelectionThroughViewport(t *testing.T) {
 	var output bytes.Buffer
 	dashboard := newSizedTerminalDashboard(&output, func() int { return 80 }, func() int { return 12 }, asciiPalette)
