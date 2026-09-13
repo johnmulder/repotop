@@ -136,8 +136,11 @@ func TestTerminalDashboardMovesSelectionThroughViewport(t *testing.T) {
 		}}
 	}
 	dashboard.publish(statuses)
+	if rows := strings.Count(dashboard.last, "repo-"); rows != 8 {
+		t.Fatalf("viewport shows %d repository rows, want 8:\n%s", rows, dashboard.last)
+	}
 	dashboard.moveSelection(dashboard.pageSize())
-	if dashboard.selected != "repo-04" || !strings.Contains(dashboard.last, "> repo-04") {
+	if dashboard.selected != "repo-08" || !strings.Contains(dashboard.last, "> repo-08") {
 		t.Fatalf("page selection = %q\n%s", dashboard.selected, dashboard.last)
 	}
 	if lines := strings.Count(dashboard.last, "\n"); lines > 12 {

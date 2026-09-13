@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -145,7 +144,7 @@ func TestUnicodePaletteUsesReviewedGlyphsWithoutLosingText(t *testing.T) {
 	}
 }
 
-func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
+func TestTerminalCellWidthTruncationAndPadding(t *testing.T) {
 	joinedEmoji := "\U0001f469\u200d\U0001f4bb"
 	modifiedEmoji := "\U0001f44d\U0001f3fd"
 	tests := []struct {
@@ -176,16 +175,6 @@ func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
 		t.Fatalf("padding = %q (%d cells)", got, displayWidth(got))
 	}
 
-	value := "a\u4ed3e\u0301b"
-	lines := wrappedLine(value, 3)
-	if strings.Join(lines, "") != value {
-		t.Fatalf("wrapping changed content: %q", lines)
-	}
-	for _, line := range lines {
-		if displayWidth(line) > 3 {
-			t.Fatalf("wrapped line uses %d cells: %q", displayWidth(line), line)
-		}
-	}
 	if got := takeSuffixCells("ae\u0301", 1); got != "e\u0301" {
 		t.Fatalf("suffix split combining sequence: %q", got)
 	}
@@ -208,12 +197,6 @@ func TestTerminalCellWidthTruncationPaddingAndWrapping(t *testing.T) {
 	}
 	if got := middleTruncate("abcdef"+joinedEmoji+"b", 7); got != "a..."+joinedEmoji+"b" {
 		t.Fatalf("middle truncation split joined emoji: %q", got)
-	}
-	if got := wrappedLine(graphemeValue, 2); !reflect.DeepEqual(got, []string{"a", joinedEmoji, "b"}) {
-		t.Fatalf("wrapping split joined emoji: %q", got)
-	}
-	if got := wrappedLine(joinedEmoji, 1); !reflect.DeepEqual(got, []string{"?"}) {
-		t.Fatalf("narrow wrapping split joined emoji: %q", got)
 	}
 	if got := selectionPrefix("other", "selected", renderPalette{selection: joinedEmoji}); got != "  " {
 		t.Fatalf("selection indentation = %q, want two cells", got)

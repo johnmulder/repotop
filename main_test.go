@@ -385,40 +385,15 @@ func TestFreshnessStatesPreserveKnownDistance(t *testing.T) {
 	}
 }
 
-func TestSelectedDetailsShowSanitizedErrorsAndTimestamps(t *testing.T) {
-	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
-	snapshot := repositorySnapshot{
-		repoStatus: repoStatus{
-			Path:        "repo",
-			Branch:      "topic\x1b",
-			Ahead:       2,
-			HasRemote:   true,
-			HasUpstream: true,
-		},
-		Fetch: fetchStatus{
-			LastAttempt: now.Add(-2 * time.Minute),
-			LastSuccess: now.Add(-10 * time.Minute),
-			Duration:    2 * time.Second,
-			Error:       "credential\x1b[31m\nrejected",
-		},
-	}
-	output := renderSnapshot([]repositorySnapshot{snapshot}, 80, "repo", now, defaultFetchInterval, asciiPalette)
-	for _, want := range []string{
-		"remote: +2 stale; freshness interval 3m0s",
-		"fetch: failed; attempted 2026-08-25T11:58:00Z; duration 2s",
-		"last success: 2026-08-25T11:50:00Z",
-		"fetch error: credential?[31m rejected",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("selected detail missing %q:\n%s", want, output)
+func TestSelectedSnapshotEndsAtSummary(t *testing.T) {
+	snapshot := repositorySnapshot{repoStatus: repoStatus{Path: "custom_skills", Branch: "master"}}
+	for _, height := range []int{0, 12, 24} {
+		output := renderSnapshotSized([]repositorySnapshot{snapshot}, 80, height, snapshot.Path, time.Unix(100, 0), defaultFetchInterval, asciiPalette)
+		if !strings.Contains(output, "> custom_skills") || !strings.Contains(output, "no remote") {
+			t.Fatalf("height %d lost selected repository state:\n%s", height, output)
 		}
-	}
-	if strings.Contains(output, "\x1b") {
-		t.Fatalf("selected detail contains a control character: %q", output)
-	}
-	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
-		if displayWidth(line) > 80 {
-			t.Fatalf("detail line exceeded width: %q", line)
+		if strings.Count(output, "\n") != 5 || !strings.HasSuffix(output, "\n1 repo (1 clean, 0 dirty, 0 ahead, 0 behind, 0 errors)\n") {
+			t.Fatalf("height %d rendered extra output after the table and summary:\n%s", height, output)
 		}
 	}
 }

@@ -63,25 +63,17 @@ func renderStyledSnapshotSized(statuses []repositorySnapshot, width, height int,
 	}
 
 	selectedIndex := -1
-	var details []string
 	if selected != "" {
 		for index, status := range ordered {
 			if status.Path == selected {
 				selectedIndex = index
-				details = renderDetails(status, width, now, fetchInterval, palette)
 				break
 			}
 		}
 	}
 	start, end := 0, len(ordered)
 	if height > 0 && len(ordered) > 0 {
-		fixedLines := 4
-		if len(details) > 0 && height >= len(details)+6 {
-			fixedLines += len(details) + 1
-		} else {
-			details = nil
-		}
-		start, end = selectedWindow(len(ordered), selectedIndex, max(1, height-fixedLines))
+		start, end = selectedWindow(len(ordered), selectedIndex, max(1, height-4))
 	}
 
 	prefixWidth := 0
@@ -97,10 +89,6 @@ func renderStyledSnapshotSized(statuses []repositorySnapshot, width, height int,
 		lines[index+2] = style.apply(status, now, fetchInterval, lines[index+2])
 	}
 	lines = append(lines, "", fitLine(renderSummary(width, len(statuses), clean, dirty, ahead, behind, failures), width))
-	if len(details) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, details...)
-	}
 	if height > 0 && len(lines) > height {
 		lines = lines[:height]
 	}
@@ -256,65 +244,6 @@ func remoteDistance(status repoStatus, palette renderPalette) string {
 		parts = append(parts, fmt.Sprintf("%s%d", palette.behind, status.Behind))
 	}
 	return strings.Join(parts, " ")
-}
-
-func renderDetails(snapshot repositorySnapshot, width int, now time.Time, fetchInterval time.Duration, palette renderPalette) []string {
-	lines := wrappedLine("details: "+safeCell(snapshot.Path), width)
-	if snapshot.Error != "" {
-		lines = append(lines, wrappedLine("local error: "+safeCell(oneLine(snapshot.Error)), width)...)
-	} else {
-		lines = append(lines, wrappedLine(fmt.Sprintf("local: branch %s; worktree %s", safeCell(snapshot.Branch), worktreeText(snapshot.repoStatus)), width)...)
-	}
-
-	remote := "remote: " + remoteText(snapshot, now, fetchInterval, palette)
-	if snapshot.HasUpstream && fetchInterval > 0 {
-		remote += "; freshness interval " + fetchInterval.String()
-	}
-	lines = append(lines, wrappedLine(remote, width)...)
-
-	switch {
-	case snapshot.Fetching:
-		lines = append(lines, wrappedLine("fetch: in progress", width)...)
-	case snapshot.Fetch.LastAttempt.IsZero():
-		lines = append(lines, wrappedLine("fetch: never attempted", width)...)
-	case snapshot.Fetch.Error != "":
-		lines = append(lines, wrappedLine(fmt.Sprintf("fetch: failed; attempted %s; duration %s",
-			formatTime(snapshot.Fetch.LastAttempt), snapshot.Fetch.Duration.Round(time.Millisecond)), width)...)
-	default:
-		lines = append(lines, wrappedLine(fmt.Sprintf("fetch: succeeded %s; duration %s",
-			formatTime(snapshot.Fetch.LastSuccess), snapshot.Fetch.Duration.Round(time.Millisecond)), width)...)
-	}
-	if !snapshot.Fetch.LastSuccess.IsZero() && (snapshot.Fetching || snapshot.Fetch.Error != "") {
-		lines = append(lines, wrappedLine("last success: "+formatTime(snapshot.Fetch.LastSuccess), width)...)
-	}
-	if snapshot.Fetch.Error != "" {
-		lines = append(lines, wrappedLine("fetch error: "+safeCell(oneLine(snapshot.Fetch.Error)), width)...)
-	}
-	return lines
-}
-
-func formatTime(value time.Time) string {
-	return value.UTC().Format(time.RFC3339)
-}
-
-func wrappedLine(value string, width int) []string {
-	width = max(1, width)
-	if value == "" {
-		return []string{""}
-	}
-	var lines []string
-	for value != "" {
-		part := takePrefixCells(value, width)
-		consumed := len(part)
-		if consumed == 0 {
-			cluster, _, _, _ := uniseg.FirstGraphemeClusterInString(value, -1)
-			consumed = len(cluster)
-			part = "?"
-		}
-		lines = append(lines, part)
-		value = value[consumed:]
-	}
-	return lines
 }
 
 func middleTruncate(value string, width int) string {

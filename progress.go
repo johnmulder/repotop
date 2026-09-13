@@ -147,8 +147,8 @@ func (dashboard *terminalDashboard) moveSelection(delta int) {
 func (dashboard *terminalDashboard) pageSize() int {
 	dashboard.mu.Lock()
 	defer dashboard.mu.Unlock()
-	if height := dashboard.height(); height > 8 {
-		return height - 8
+	if height := dashboard.height(); height > 0 {
+		return max(1, height-4)
 	}
 	return 10
 }
