@@ -25,6 +25,26 @@ go install .
 
 `go install` writes `repotop` to `GOBIN` when configured, otherwise to the `bin` directory under `GOPATH` (normally `$HOME/go/bin`). Put that directory on `PATH`, then run `repotop --help`.
 
+### Identify a local build
+
+To build offline from a clean, committed checkout, use the installed Go toolchain and cached dependencies:
+
+```sh
+(
+    set -eu
+    export GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTELEMETRY=off
+    test -z "$(git status --porcelain)" || { echo 'Commit or set aside changes before building.' >&2; exit 1; }
+    revision="$(git rev-parse --short=12 HEAD)"
+    CGO_ENABLED=0 go build -trimpath -buildvcs=true \
+        -ldflags="-X main.version=git-${revision}" -o ./repotop .
+    ./repotop --version
+    go version -m ./repotop
+    shasum -a 256 ./repotop
+)
+```
+
+The ignored `./repotop` output leaves the checkout clean. Check that the embedded `vcs.revision` matches `git rev-parse HEAD` and `vcs.modified=false`. Retain the checksum and `go version -m` output with the binary: they identify the artifact, toolchain, dependencies and build settings. Repeating this build with the same source, toolchain and settings should produce the same checksum. Missing cached dependencies or an older local toolchain cause an error instead of a download.
+
 ## Usage
 
 ```text
@@ -57,7 +77,7 @@ repotop --ascii --once --fetch ~/src
 repotop --version
 ```
 
-Source and other untagged builds report `repotop devel`. Release builds report the version tag injected at build time.
+Default source builds report `repotop devel`. The identified local build above reports `repotop git-<revision>`. Release builds report the version tag injected at build time.
 
 ## Output modes and refresh policy
 
