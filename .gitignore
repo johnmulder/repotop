@@ -6,3 +6,6 @@ __pycache__/
 /repotop
 /coverage.out
 /dist/
+
+# macOS Finder metadata
+.DS_Store
