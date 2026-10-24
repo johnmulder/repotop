@@ -305,6 +305,9 @@ func discover(ctx context.Context, root string, exclusions map[string]struct{}) 
 			return nil
 		}
 		if path != root {
+			if entry.Name() == ".git" {
+				return fs.SkipDir
+			}
 			if _, excluded := exclusions[path]; excluded {
 				return fs.SkipDir
 			}
@@ -315,7 +318,7 @@ func discover(ctx context.Context, root string, exclusions map[string]struct{}) 
 		switch {
 		case err == nil && (markerInfo.IsDir() || markerInfo.Mode().IsRegular()):
 			repositories = append(repositories, path)
-			return fs.SkipDir
+			return nil
 		case err != nil && !errors.Is(err, fs.ErrNotExist):
 			failure := fmt.Errorf("%s: %w", gitMarker, err)
 			if path == root {

@@ -15,11 +15,15 @@ import (
 func TestDiscover(t *testing.T) {
 	root := t.TempDir()
 	repository := filepath.Join(root, "repo-a")
+	nested := filepath.Join(repository, "nested")
 	worktree := filepath.Join(root, "group", "worktree")
+	worktreeNested := filepath.Join(worktree, "group", "nested")
 	mustMkdir(t, filepath.Join(repository, ".git"))
-	mustMkdir(t, filepath.Join(repository, "nested", ".git"))
+	mustMkdir(t, filepath.Join(nested, ".git"))
+	mustMkdir(t, filepath.Join(repository, ".git", "metadata", ".git"))
 	mustMkdir(t, worktree)
 	mustWrite(t, filepath.Join(worktree, ".git"), "gitdir: elsewhere\n")
+	mustMkdir(t, filepath.Join(worktreeNested, ".git"))
 	mustMkdir(t, filepath.Join(root, "ordinary"))
 
 	repositories, scanErrors, err := discover(context.Background(), root, nil)
@@ -29,7 +33,7 @@ func TestDiscover(t *testing.T) {
 	if len(scanErrors) != 0 {
 		t.Fatalf("discover errors: %v", scanErrors)
 	}
-	want := []string{worktree, repository}
+	want := []string{worktree, worktreeNested, repository, nested}
 	if !reflect.DeepEqual(repositories, want) {
 		t.Fatalf("discover() = %v, want %v", repositories, want)
 	}
@@ -37,8 +41,9 @@ func TestDiscover(t *testing.T) {
 
 func TestDiscoverRootRepository(t *testing.T) {
 	root := t.TempDir()
+	nested := filepath.Join(root, "group", "nested")
 	mustMkdir(t, filepath.Join(root, ".git"))
-	mustMkdir(t, filepath.Join(root, "nested", ".git"))
+	mustMkdir(t, filepath.Join(nested, ".git"))
 
 	repositories, scanErrors, err := discover(context.Background(), root, map[string]struct{}{root: {}})
 	if err != nil {
@@ -47,8 +52,9 @@ func TestDiscoverRootRepository(t *testing.T) {
 	if len(scanErrors) != 0 {
 		t.Fatalf("discover errors: %v", scanErrors)
 	}
-	if !reflect.DeepEqual(repositories, []string{root}) {
-		t.Fatalf("discover() = %v, want root only", repositories)
+	want := []string{root, nested}
+	if !reflect.DeepEqual(repositories, want) {
+		t.Fatalf("discover() = %v, want %v", repositories, want)
 	}
 }
 
@@ -57,6 +63,7 @@ func TestDiscoverExcludesExactSubtreesWithoutReadingGitignore(t *testing.T) {
 	kept := filepath.Join(root, "kept", "repository")
 	ignored := filepath.Join(root, "ignored", "repository")
 	excluded := filepath.Join(root, "vendor")
+	mustMkdir(t, filepath.Join(root, ".git"))
 	mustMkdir(t, filepath.Join(kept, ".git"))
 	mustMkdir(t, filepath.Join(ignored, ".git"))
 	mustMkdir(t, filepath.Join(excluded, "repository", ".git"))
@@ -66,7 +73,7 @@ func TestDiscoverExcludesExactSubtreesWithoutReadingGitignore(t *testing.T) {
 	if err != nil || len(scanErrors) != 0 {
 		t.Fatalf("discover errors: scan=%v fatal=%v", scanErrors, err)
 	}
-	want := []string{ignored, kept}
+	want := []string{root, ignored, kept}
 	if !reflect.DeepEqual(repositories, want) {
 		t.Fatalf("discover() = %v, want %v", repositories, want)
 	}

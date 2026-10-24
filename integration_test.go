@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -8,6 +9,33 @@ import (
 	"reflect"
 	"testing"
 )
+
+func TestRunJSONDiscoversNestedRealGitRepositories(t *testing.T) {
+	root := newRealRepository(t)
+	commitRealFile(t, root, "tracked.txt", "initial\n", "initial")
+	nested := filepath.Join(root, "group", "nested")
+	initRealRepository(t, nested)
+	initRealRepository(t, filepath.Join(nested, "deeper"))
+	worktree := filepath.Join(root, "group", "worktree")
+	runTestGit(t, root, "worktree", "add", "-b", "topic", worktree)
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--json", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("JSON exit = %d, stderr = %q", code, stderr.String())
+	}
+	document := decodeJSONDocument(t, stdout.Bytes())
+	var paths []string
+	for _, repository := range document.Repositories {
+		paths = append(paths, repository.Path)
+		if repository.Error != "" || repository.Branch == "unknown" {
+			t.Errorf("repository inspection: %+v", repository)
+		}
+	}
+	want := []string{".", "group/nested", "group/nested/deeper", "group/worktree"}
+	if !reflect.DeepEqual(paths, want) || stderr.Len() != 0 {
+		t.Fatalf("JSON repositories = %v, want %v; stderr = %q", paths, want, stderr.String())
+	}
+}
 
 func TestInspectRealGitConflict(t *testing.T) {
 	repository := newRealRepository(t)

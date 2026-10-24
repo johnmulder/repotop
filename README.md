@@ -53,6 +53,8 @@ repotop [options] [directory]
 
 The directory defaults to the current directory.
 
+Discovery scans the full directory tree, including repositories nested inside other repositories and a repository at the scan root. It skips `.git` internals, symbolic links, and explicitly excluded subtrees; `.gitignore` does not limit discovery. The tree is scanned at startup and when you press `r` in interactive mode. Timed refreshes inspect the repositories already found.
+
 | Option | Behavior |
 | --- | --- |
 | `--ascii` | Use plain ASCII application symbols. Repository names remain Unicode. |

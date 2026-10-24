@@ -180,7 +180,7 @@ Walk the requested directory recursively.
 
 A directory containing `.git` is a repository root. `.git` may be either a directory or a file, since Git worktrees and submodules can use a `.git` file.
 
-Once a repository root is discovered, do not recursively inspect its contents for arbitrary nested repositories unless there is a clear reason to support that behavior. This avoids traversing `.git`, vendored trees, and repository internals unnecessarily.
+Continue through working directories after finding a repository root, including when the scan root is itself a repository. Discover nested repositories by default, while skipping `.git` internals, symbolic links, and explicitly excluded subtrees. Do not use `.gitignore` to prune discovery.
 
 Discovery should:
 
